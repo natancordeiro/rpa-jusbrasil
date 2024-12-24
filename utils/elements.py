@@ -1,0 +1,29 @@
+"""
+Modulo destinado para armazenar os seletores utilizados na Automação. 
+
+XPATH | CSS
+"""
+
+XPATH = {
+    'page_verify_human': 'xpath=//p[contains(text(), "you are human")]',
+    'sucesso': 'xpath=//h1[contains(text(), "solicitada com sucesso")]'
+}
+
+CSS = {
+    'login': 'css=.btn-login',
+    'input_login': 'css=#FormFieldset-email',
+    'submit': 'css=button[type="submit"]',
+    'input_senha': 'css=#FormFieldset-password',
+    'btn_reportar_pagina': 'css=.RemoveInformationTrigger-btn',
+    'close_popup': 'css=i.icon-remove',
+    'select_motivo': 'css=#removal_reason',
+    'outros': 'css=option[value="OUTRO"]',
+    'input_nome': 'css=#name_remove',
+    'telefone': 'css=#telephone',
+    'anexo': '#documentation',
+    'checkbox': '#check_confirm',
+    'frame_recaptcha': "css=iframe[src*='recaptcha']",
+    'check_captcha': 'css=#recaptcha-anchor',
+    'repsonse_captcha': 'css=#g-recaptcha-response'
+
+}

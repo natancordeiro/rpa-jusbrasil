@@ -1,63 +1,44 @@
-import asyncio
-from playwright.async_api import async_playwright
-import yaml
-import pandas as pd
-from asyncio import Semaphore
+from src.bot import Bot
 
 from utils.logger_config import logger
+from utils.global_functions import *
 
-# Função para carregar a configuração do arquivo YAML
-def carregar_configuracao(caminho_arquivo):
-    with open(caminho_arquivo, 'r') as arquivo:
-        return yaml.safe_load(arquivo)
+def main():
+    """Executa a navegação e processamento para uma URL específica."""
 
-# Função para carregar os links do arquivo .txt
-def carregar_links_txt(caminho_txt):
-    with open(caminho_txt, 'r') as arquivo:
-        linhas = arquivo.readlines()
-    links_processados = []
-    for linha in linhas:
-        partes = linha.strip().split(';')
-        if len(partes) == 2:
-            links_processados.append({'url': partes[0], 'nome': partes[1]})
-    return links_processados
-
-# Função assíncrona para processar cada link
-async def processar_link(url, nome, semaforo):
-    async with semaforo:
-        async with async_playwright() as p:
-            navegador = await p.chromium.launch(headless=False)
-            contexto = await navegador.new_context()
-            pagina = await contexto.new_page()
-
-            try:
-                logger.info(f"Acessando: {url} para remover {nome}")
-                await pagina.goto(url)
-
-                await asyncio.sleep(5)
-            except Exception as e:
-                logger.error(f"Erro ao acessar {url}: {e}")
-            finally:
-                await navegador.close()
-
-# Função principal para gerenciar a execução
-def executar(caminho_yaml, caminho_txt):
-    config = carregar_configuracao(caminho_yaml)
-    links = carregar_links_txt(caminho_txt)
-
+    
+    # Carregar configurações globais
+    config = carregar_configuracao('config.yaml')
     max_navegadores = config.get('navegadores_simultaneos', 5)
-    semaforo = Semaphore(max_navegadores)
+    caminho_txt = config.get('arquivo_input', 'dados.txt')
+    email = config.get('login', '')
+    senha = config.get('senha', '')
+    token = config.get('token', '')
 
-    asyncio.run(executar_links(links, semaforo))
+    # Carregar links a partir do arquivo
+    links = carregar_links_txt(caminho_txt)
+    qtde_abas = min(max_navegadores, len(links))
 
-# Função assíncrona para orquestrar os acessos aos links
-async def executar_links(links, semaforo):
-    tarefas = []
+    bot = Bot(qtde_abas)
+    bot.load_page(links[:qtde_abas])
+    bot.login(email, senha)
+    try:
+        while links:
 
-    for link_info in links:
-        tarefas.append(processar_link(link_info['url'], link_info['nome'], semaforo))
+            # Abre a página de remoção do nome 
+            bot.abre_remocao()
 
-    await asyncio.gather(*tarefas)
+            # Preenche o formulário
+            bot.preenche_formulario(links[:qtde_abas], token)
 
-# Exemplo de chamada (ajustar os caminhos conforme necessário)
-executar("config.yaml", "dados.txt")
+            bot.driver.clear_cache()
+
+    except Exception as e:
+        logger.error(e)
+
+    finally:
+        bot.quit()
+
+if __name__ == '__main__':
+    
+    main()
