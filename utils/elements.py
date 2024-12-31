@@ -10,6 +10,7 @@ XPATH = {
 }
 
 CSS = {
+    'logado': 'css=div.topbar-profile',
     'login': 'css=.btn-login',
     'input_login': 'css=#FormFieldset-email',
     'submit': 'css=button[type="submit"]',
@@ -24,6 +25,6 @@ CSS = {
     'checkbox': '#check_confirm',
     'frame_recaptcha': "css=iframe[src*='recaptcha']",
     'check_captcha': 'css=#recaptcha-anchor',
-    'repsonse_captcha': 'css=#g-recaptcha-response'
-
+    'repsonse_captcha': 'css=#g-recaptcha-response',
+    'erro': 'css=div.message-error'
 }

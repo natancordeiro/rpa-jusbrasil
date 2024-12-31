@@ -8,6 +8,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import WebDriverException
 from DrissionPage import SessionOptions, Chromium
 
+from utils.global_functions import carregar_configuracao
+
 class Driver(Interation):
     """Classe para gerenciar o WebDriver e as opções do navegador."""
 
@@ -106,7 +108,11 @@ class Driver(Interation):
             so.set_proxies(proxy)
 
             self.driver = Chromium(session_options=so)
-            self.driver.clear_cache()
+            config = carregar_configuracao('config.yaml')
+            salvar_login = config.get('salvar_login', False)
+            if not salvar_login:
+                self.driver.clear_cache()
+
         except WebDriverException as e:
             if 'This version of ChromeDriver only supports Chrome version' in str(e):
                 versao_chromedriver_suporta = re.search("ChromeDriver only supports Chrome version (\\d+)", str(e)).group(1)

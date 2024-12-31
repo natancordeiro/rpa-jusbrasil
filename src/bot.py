@@ -81,6 +81,22 @@ class Bot(Interation):
             for tab in self.tabs:
                 tab.ele(seletor, timeout=tempo).input(valor)
 
+    def is_loged(self):
+        """
+        Verifica se o bot está logado na página.
+
+        Returns:
+            bool: True se o bot está logado, False caso contrário.
+        """
+        try:
+            logado = self.tab_principal.ele(CSS['logado'], timeout=3)
+            if logado:
+                return True
+            else:
+                return False
+        except Exception:
+            return False
+
     def login(self, email: str, senha: str) -> bool:
         """
         Faz o login no sistema.
@@ -105,6 +121,7 @@ class Bot(Interation):
             self.sleep(0.5)
             self.write(CSS['input_senha'], senha, metodo='css')
             self.click(CSS['submit'], metodo='css')
+            self.wait_for(CSS['logado'], timeout=3)
             logger.info(f"Login realizado com sucesso nas {len(self.tabs)} abas")
             return True
         except Exception as e:
@@ -119,6 +136,7 @@ class Bot(Interation):
         try:
             # Clica em "Reportar Página"
             self.click(CSS['btn_reportar_pagina'])
+            self.sleep(2)
 
             # Resolve o CAPTCHA
             for i, page in enumerate(self.tabs):
@@ -176,8 +194,21 @@ class Bot(Interation):
             self.resolver_recaptcha(api_key)
 
             # Espera a remoção ter sido solicitada
-            self.tab_principal.ele(XPATH['sucesso']).wait.enabled()
-            logger.info("Formulário enviado.")
+            try:
+                for i, tab in enumerate(self.tabs):
+                    try:
+                        sucesso = tab.ele(XPATH['sucesso'], timeout=1)
+                        if sucesso:
+                            logger.info(f"Remoção solicitada com sucesso na {i+1}° página | Nome: {links[i]['nome']}")
+                        else:
+                            logger.error(f"Remoção não solicitada na {i+1}° página. | Nome: {links[i]['nome']}")
+                            erro = tab.ele(CSS['erro'], timeout=1).text
+                            logger.error(f"Erro: {erro}")
+                    except Exception:
+                        logger.error(f"Erro ao verificar remoção na {i+1}° página.")                
+            except:
+                logger.error("Remoção não solicitada.")
+            logger.info("Formulários enviados.")
 
             return True
         except Exception as e:
@@ -197,9 +228,9 @@ class Bot(Interation):
 
         try:
             # Marca o checkbox
-            for page in self.tabs:
-                frame_captcha = page.ele('css=iframe[title="reCAPTCHA"]')
-                frame_captcha.ele(CSS['check_captcha']).click()
+            # for page in self.tabs:
+            #     frame_captcha = page.ele('css=iframe[title="reCAPTCHA"]')
+            #     frame_captcha.ele(CSS['check_captcha']).click()
 
             # Obtem as variáveis para enviar na API 2CAPTCHA
             url_recaptcha = self.tab_principal.ele(CSS['frame_recaptcha']).attrs['src']
@@ -216,11 +247,12 @@ class Bot(Interation):
                 page.ele(CSS['repsonse_captcha']).set.style('display', 'block')
                 page.ele(CSS['repsonse_captcha']).input(captcha_token)
 
-            for page in self.tabs:
-                frame_captcha = page.ele('css=iframe[title="reCAPTCHA"]')
-                frame_captcha.ele(CSS['check_captcha']).click()
+            # for page in self.tabs:
+            #     frame_captcha = page.ele('css=iframe[title="reCAPTCHA"]')
+            #     frame_captcha.ele(CSS['check_captcha']).click()
 
             self.click(CSS['submit'])
+            self.tab_principal.wait.url_change('enviar')
             logger.info("reCAPTCHA Resolvido com sucesso!")
             return True
         
