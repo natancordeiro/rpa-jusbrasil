@@ -6,7 +6,7 @@ from iterator.iteration import Interation
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import WebDriverException
-from DrissionPage import SessionOptions, Chromium
+from DrissionPage import SessionOptions, Chromium, ChromiumOptions
 
 from utils.global_functions import carregar_configuracao
 
@@ -99,15 +99,13 @@ class Driver(Interation):
             if desabilitar_carregamento_imagem:
                 options.add_argument('--blink-settings=imagesEnabled=false')
         try:
-            username = "u5d07236857af05c7-zone-custom"
-            password = "u5d07236857af05c7"
-            PROXY_DNS = "43.152.113.55:2333"
-            proxy = {"http":"http://{}:{}@{}".format(username, password, PROXY_DNS)}
 
-            so = SessionOptions()
-            so.set_proxies(proxy)
+            co = ChromiumOptions()
+            proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
+            co.add_extension(proxy_path)
 
-            self.driver = Chromium(session_options=so)
+            self.driver = Chromium(addr_or_opts=co)
+
             config = carregar_configuracao('config.yaml')
             salvar_login = config.get('salvar_login', False)
             if not salvar_login:
@@ -122,4 +120,3 @@ class Driver(Interation):
                 logging.critical('Erro ao instânciar Navegador.')
                 sys.exit(1)
 
-    

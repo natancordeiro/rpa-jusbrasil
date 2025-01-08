@@ -1,4 +1,4 @@
-from utils.cloudflare.CloudflareBypasser import CloudflareBypasser
+from utilitarios.cloudflare.CloudflareBypasser import CloudflareBypasser
 from screeninfo import get_monitors
 from twocaptcha import TwoCaptcha
 import os
@@ -177,7 +177,7 @@ class Bot(Interation):
             self.write(CSS['telefone'], telefone)
 
             # Anexa o PDF
-            pdf_file = os.path.join(os.getcwd(), 'utils', 'arquivo.pdf')
+            pdf_file = os.path.join(os.getcwd(), 'utilitarios', 'arquivo.pdf')
             self.write(CSS['anexo'], pdf_file)
 
             # Enviar solicitação
