@@ -1,4 +1,4 @@
-from utilitarios.cloudflare.CloudflareBypasser import CloudflareBypasser
+from utils.cloudflare import CloudflareBypasser
 from screeninfo import get_monitors
 from twocaptcha import TwoCaptcha
 import os

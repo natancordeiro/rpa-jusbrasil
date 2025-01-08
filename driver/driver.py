@@ -6,7 +6,7 @@ from iterator.iteration import Interation
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import WebDriverException
-from DrissionPage import SessionOptions, Chromium, ChromiumOptions
+from DrissionPage import Chromium, ChromiumOptions
 
 from utils.global_functions import carregar_configuracao
 
