@@ -4,12 +4,11 @@ from twocaptcha import TwoCaptcha
 import os
 
 from driver.driver import Driver
-from iterator.iteration import Interation
 from utils.logger_config import logger
 from utils.elements import XPATH, CSS
 from utils.global_functions import *
 
-class Bot(Interation):
+class Bot():
     """Classe que define um bot para interação automatizada com páginas da web."""
 
     def __init__(self, qtde_windows: int = 1, nome_arquivo_csv: str = 'resultado.csv'):
@@ -48,7 +47,6 @@ class Bot(Interation):
                     desabilitar_carregamento_imagem=False
                 ).driver
 
-                super().__init__(self.driver)
                 self.tab_principal = self.driver.new_tab()
                 self.tab_principal.set.window.size(largura_janela, altura_janela)
                 self.tab_principal.set.window.location(pos_x, pos_y)
