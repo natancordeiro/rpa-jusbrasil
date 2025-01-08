@@ -1,6 +1,9 @@
 """
 Módulo onde é guardado as funções externas para utilização geral do projeto.
 """
+
+import os
+import csv
 import yaml
 import random
 from urllib.parse import urlparse, parse_qs
@@ -60,3 +63,14 @@ def get_sitekey(url):
     
     # Retornar o valor do parâmetro 'k' (se existir)
     return parametros.get('k', [None])[0]
+
+def criar_csv(nome_arquivo):
+    if not os.path.exists(nome_arquivo):
+        with open(nome_arquivo, mode='w', newline='', encoding='utf-8') as arquivo:
+            escritor = csv.writer(arquivo, delimiter=';')
+            escritor.writerow(['link', 'nome', 'status/erro']) 
+
+def adicionar_ao_csv(nome_arquivo, link, nome, status_erro):
+    with open(nome_arquivo, mode='a', newline='', encoding='utf-8') as arquivo:
+        escritor = csv.writer(arquivo, delimiter=';')
+        escritor.writerow([link, nome, status_erro])  # Adiciona uma nova linha

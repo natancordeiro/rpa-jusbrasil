@@ -12,7 +12,7 @@ from utils.global_functions import *
 class Bot(Interation):
     """Classe que define um bot para interação automatizada com páginas da web."""
 
-    def __init__(self, qtde_windows: int = 1):
+    def __init__(self, qtde_windows: int = 1, nome_arquivo_csv: str = 'resultado.csv'):
         """
         Inicializa um objeto Bot.
 
@@ -20,6 +20,8 @@ class Bot(Interation):
             log_file (bool): Define se os registros serão salvos em um arquivo de log (padrão: True).
         """
         
+        self.nome_arquivo_csv = nome_arquivo_csv
+
         self.tabs = []
         monitor = get_monitors()[0]
         largura_tela = monitor.width
@@ -59,9 +61,10 @@ class Bot(Interation):
                 tab.set.window.location(pos_x, pos_y)
                 self.tabs.append(tab)
 
-    def load_page(self, urls):
+    def load_page(self, urls, mostra_log):
         for tab, url in zip(self.tabs, urls):
-            logger.info(f"Acessando: {url['url']} para remover {url['nome']}")
+            if mostra_log:
+                logger.info(f"Acessando: {url['url']} para remover {url['nome']}")
             tab.get(url['url'])
 
     def wait_for(self, tag, timeout=15, metodo='xpath', element_is='clickable'):
@@ -111,6 +114,9 @@ class Bot(Interation):
 
         try:
             logger.info('Efetuando login..')
+            if 'you have been blocked' in self.tab_principal.html:
+                logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
+                return False
             self.wait_for(CSS['login'], metodo='css')
             self.click(CSS['login'], metodo='css')
             self.wait_for(CSS['input_login'], metodo='css')
@@ -136,7 +142,11 @@ class Bot(Interation):
         try:
             # Clica em "Reportar Página"
             self.click(CSS['btn_reportar_pagina'])
-            self.sleep(2)
+            self.sleep(10)
+
+            if 'you have been blocked' in self.tab_principal.html:
+                logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
+                return False
 
             # Resolve o CAPTCHA
             for i, page in enumerate(self.tabs):
@@ -144,6 +154,7 @@ class Bot(Interation):
                 cf_bypasser.bypass()
                 logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
+            self.sleep(3)
             self.click(CSS['close_popup'])
             logger.info('Página "Remoção de informações" carregada com sucesso.')
             return True
@@ -182,16 +193,31 @@ class Bot(Interation):
 
             # Enviar solicitação
             self.click(CSS['submit'])
-            self.sleep(2)
-
+            self.sleep(13)
+            
+            while self.tab_principal.states.is_loading:
+                self.sleep(1)
+            
             # Fecha o Pop-up
             self.click(CSS['close_popup'])
+
+            try:
+                for tab in self.tabs:
+                    tab.ele(CSS['close_popup'], timeout=0.1).click()
+            except:
+                pass
 
             # Marcar a opção do checkbox
             self.click(CSS['checkbox'])
 
             # Resolve o reCAPTCHA
             self.resolver_recaptcha(api_key)
+
+            # Se aparecer captcha novamente
+            for i, page in enumerate(self.tabs):
+                cf_bypasser = CloudflareBypasser(page)
+                cf_bypasser.bypass()
+                logger.debug(f"Página {i+1}: CAPTCHA resolvido")
 
             # Espera a remoção ter sido solicitada
             try:
@@ -200,12 +226,14 @@ class Bot(Interation):
                         sucesso = tab.ele(XPATH['sucesso'], timeout=1)
                         if sucesso:
                             logger.info(f"Remoção solicitada com sucesso na {i+1}° página | Nome: {links[i]['nome']}")
+                            adicionar_ao_csv(self.nome_arquivo_csv, links[i]['url'], links[i]['nome'], 'SUCESSO')
                         else:
                             logger.error(f"Remoção não solicitada na {i+1}° página. | Nome: {links[i]['nome']}")
                             erro = tab.ele(CSS['erro'], timeout=1).text
                             logger.error(f"Erro: {erro}")
+                            adicionar_ao_csv(self.nome_arquivo_csv, links[i]['url'], links[i]['nome'], f'ERRO - {erro}')
                     except Exception:
-                        logger.error(f"Erro ao verificar remoção na {i+1}° página.")                
+                        logger.error(f"Erro ao verificar remoção na {i+1}° página.")
             except:
                 logger.error("Remoção não solicitada.")
             logger.info("Formulários enviados.")
@@ -254,6 +282,7 @@ class Bot(Interation):
             self.click(CSS['submit'])
             self.tab_principal.wait.url_change('enviar')
             logger.info("reCAPTCHA Resolvido com sucesso!")
+            self.sleep(2)
             return True
         
         except Exception as e:

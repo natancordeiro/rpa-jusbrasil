@@ -100,14 +100,18 @@ class Driver(Interation):
                 options.add_argument('--blink-settings=imagesEnabled=false')
         try:
 
-            co = ChromiumOptions()
-            proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
-            co.add_extension(proxy_path)
-
-            self.driver = Chromium(addr_or_opts=co)
-
             config = carregar_configuracao('config.yaml')
             salvar_login = config.get('salvar_login', False)
+            usar_proxy = config.get('usar_proxy', False)
+
+            if usar_proxy:
+                co = ChromiumOptions()
+                proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
+                co.add_extension(proxy_path)
+                self.driver = Chromium(addr_or_opts=co)
+            else:
+                self.driver = Chromium()
+
             if not salvar_login:
                 self.driver.clear_cache()
 

@@ -1,4 +1,4 @@
-from src.bot import Bot
+from src.bot import Bot, CloudflareBypasser
 
 from utils.logger_config import logger
 from utils.global_functions import *
@@ -21,7 +21,10 @@ def main():
     qtde_abas = min(max_navegadores, len(links))
 
     bot = Bot(qtde_abas)
-    bot.load_page(links[:qtde_abas])
+    bot.load_page(links[:qtde_abas], False)
+    abriu = False
+
+    criar_csv(bot.nome_arquivo_csv)
 
     if max_navegadores == 1:
         bot.tab_principal.set.window.max()
@@ -42,11 +45,25 @@ def main():
                     bot.tabs.pop()
 
             # Abre a página de remoção do nome
-            bot.load_page(links[:qtde_abas])
-            bot.abre_remocao()
+            bot.load_page(links[:qtde_abas], True)
+            abriu = bot.abre_remocao()
+
+            # Se não conseguiu abrir a removção, ele vai tentar novamente.
+            while not abriu:
+                bot.quit()
+                bot = Bot(qtde_abas)
+                bot.load_page(links[:qtde_abas], True)
+                abriu = bot.abre_remocao()
 
             # Preenche o formulário
             bot.preenche_formulario(links[:qtde_abas], token)
+
+            # Se aparecer captcha novamente
+            for i, page in enumerate(bot.tabs):
+                cf_bypasser = CloudflareBypasser(page)
+                cf_bypasser.bypass()
+                logger.debug(f"Página {i+1}: CAPTCHA resolvido")
+
             links = links[qtde_abas:]
         
         logger.info("Processo finalizado com sucesso.")
