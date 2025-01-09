@@ -2,6 +2,7 @@ from utils.cloudflare import CloudflareBypasser
 from screeninfo import get_monitors
 from twocaptcha import TwoCaptcha
 import os
+import time
 
 from driver.driver import Driver
 from utils.logger_config import logger
@@ -68,6 +69,9 @@ class Bot():
     def wait_for(self, tag, timeout=15, metodo='xpath', element_is='clickable'):
         for tab in self.tabs:
             tab.ele(tag, timeout=timeout)
+
+    def sleep(tempo: float):
+        time.sleep(tempo)
 
     def click(self, tag, metodo='xpath', tempo=10):
         for tab in self.tabs:
