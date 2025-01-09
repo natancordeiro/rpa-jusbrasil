@@ -70,7 +70,7 @@ class Bot():
         for tab in self.tabs:
             tab.ele(tag, timeout=timeout)
 
-    def sleep(tempo: float):
+    def sleep(self, tempo: float):
         time.sleep(tempo)
 
     def click(self, tag, metodo='xpath', tempo=10):
