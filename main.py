@@ -29,12 +29,17 @@ def main():
     if max_navegadores == 1:
         bot.tab_principal.set.window.max()
 
+    logou = True
     if salvar_login:
         logado = bot.is_loged()
         if not logado:
-            bot.login(email, senha)
+            logou = bot.login(email, senha)
     else:
-        bot.login(email, senha)
+        logou = bot.login(email, senha)
+    
+    if not logou:
+        logger.error("Falha ao logar.")
+        return
     
     try:
         while links:
