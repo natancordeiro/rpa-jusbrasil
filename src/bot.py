@@ -236,8 +236,9 @@ class Bot():
                             adicionar_ao_csv(self.nome_arquivo_csv, links[i]['url'], links[i]['nome'], f'ERRO - {erro}')
                     except Exception:
                         logger.error(f"Erro ao verificar remoção na {i+1}° página.")
-            except:
+            except Exception as e:
                 logger.error("Remoção não solicitada.")
+                adicionar_ao_csv(self.nome_arquivo_csv, links[i]['url'], links[i]['nome'], f'ERRO - {e}')
             logger.info("Formulários enviados.")
 
             return True
