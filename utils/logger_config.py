@@ -4,14 +4,14 @@ import colorlog
 def setup_logger(log_file="app.log"):
     """
     Configura o logger para registrar logs coloridos no console
-    e em um arquivo de log.
+    e em um arquivo de log com suporte a UTF-8.
     """
     
     logger = logging.getLogger("logger")
     logger.setLevel(logging.DEBUG)
 
     # Cria um handler para registrar em arquivo (sem cores)
-    file_handler = logging.FileHandler(log_file)
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")  # Define o encoding para UTF-8
     file_handler.setLevel(logging.DEBUG)
 
     file_formatter = logging.Formatter(
