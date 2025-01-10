@@ -37,9 +37,11 @@ def main():
     else:
         logou = bot.login(email, senha)
     
-    if not logou:
+    while not logou:
         logger.error("Falha ao logar.")
-        return
+        bot.quit()
+        bot = Bot(qtde_abas)
+        logou = bot.login(email, senha)
     
     try:
         while links:
