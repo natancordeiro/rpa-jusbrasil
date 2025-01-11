@@ -22,14 +22,20 @@ def main():
 
     bot = Bot(qtde_abas)
     bot.load_page(links[:qtde_abas], False)
+    while 'you have been blocked' in bot.tab_principal.html:
+        logger.error("Você foi bloqueado. Tentando novamente com outro IP.")
+        bot.quit()
+        bot = Bot(qtde_abas)
+        bot.load_page(links[:qtde_abas], False)
+        
     abriu = False
+    logou = True
 
     criar_csv(bot.nome_arquivo_csv)
 
     if max_navegadores == 1:
         bot.tab_principal.set.window.max()
 
-    logou = True
     if salvar_login:
         logado = bot.is_loged()
         if not logado:
@@ -41,6 +47,7 @@ def main():
         logger.error("Falha ao logar.")
         bot.quit()
         bot = Bot(qtde_abas)
+        bot.load_page(links[:qtde_abas], False)
         logou = bot.login(email, senha)
     
     try:
@@ -66,10 +73,12 @@ def main():
             bot.preenche_formulario(links[:qtde_abas], token)
 
             # Se aparecer captcha novamente
-            for i, page in enumerate(bot.tabs):
-                cf_bypasser = CloudflareBypasser(page)
-                cf_bypasser.bypass()
-                logger.debug(f"Página {i+1}: CAPTCHA resolvido")
+            cf_bypasser = CloudflareBypasser(bot.tab_principal)
+            if not cf_bypasser.is_bypassed():
+                for i, page in enumerate(bot.tabs):
+                    cf_bypasser = CloudflareBypasser(page)
+                    cf_bypasser.bypass()
+                    logger.debug(f"Página {i+1}: CAPTCHA resolvido")
 
             links = links[qtde_abas:]
         

@@ -116,9 +116,21 @@ class Bot():
 
         try:
             logger.info('Efetuando login..')
+
+            # Verifica se houve bloqueio do IP
             if 'you have been blocked' in self.tab_principal.html:
                 logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
                 return False
+            
+            # Verifica se tem bypass captcha
+            cf_bypasser = CloudflareBypasser(self.tab_principal)
+            if not cf_bypasser.is_bypassed():
+                for i, page in enumerate(self.tabs):
+                    cf_bypasser = CloudflareBypasser(page)
+                    cf_bypasser.bypass()
+                    logger.debug(f"Página {i+1}: CAPTCHA resolvido")
+
+            # Efetua o login
             self.wait_for(CSS['login'], metodo='css')
             self.click(CSS['login'], metodo='css')
             self.wait_for(CSS['input_login'], metodo='css')
@@ -140,6 +152,7 @@ class Bot():
         """Abre a pagina para remoção do nome."""
         
         logger.info("Solicitando remoção do nome.")
+        cf_bypasser = CloudflareBypasser(self.tab_principal)
 
         try:
             # Clica em "Reportar Página"
@@ -151,10 +164,11 @@ class Bot():
                 return False
 
             # Resolve o CAPTCHA
-            for i, page in enumerate(self.tabs):
-                cf_bypasser = CloudflareBypasser(page)
-                cf_bypasser.bypass()
-                logger.info(f"Página {i+1}: CAPTCHA resolvido")
+            if not cf_bypasser.is_bypassed():
+                for i, page in enumerate(self.tabs):
+                    cf_bypasser = CloudflareBypasser(page)
+                    cf_bypasser.bypass()
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             self.sleep(3)
             self.click(CSS['close_popup'])
@@ -216,10 +230,12 @@ class Bot():
             self.resolver_recaptcha(api_key)
 
             # Se aparecer captcha novamente
-            for i, page in enumerate(self.tabs):
-                cf_bypasser = CloudflareBypasser(page)
-                cf_bypasser.bypass()
-                logger.debug(f"Página {i+1}: CAPTCHA resolvido")
+            cf_bypasser = CloudflareBypasser(self.tab_principal)
+            if not cf_bypasser.is_bypassed():
+                for i, page in enumerate(self.tabs):
+                    cf_bypasser = CloudflareBypasser(page)
+                    cf_bypasser.bypass()
+                    logger.debug(f"Página {i+1}: CAPTCHA resolvido")
 
             # Espera a remoção ter sido solicitada
             try:
@@ -300,7 +316,7 @@ class Bot():
     def quit(self):
         """Fecha o driver do Selenium."""
 
-        logger.info("Fechando navegador")
+        logger.debug("Fechando navegador")
         self.driver.quit()
 
     def __del__(self):

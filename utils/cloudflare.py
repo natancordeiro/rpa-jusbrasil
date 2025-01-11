@@ -32,7 +32,6 @@ class CloudflareBypasser:
     
     def locate_cf_button(self):
         button = None
-        self.driver.ele("tag:input", timeout=20)
         eles = self.driver.eles("tag:input")
         for ele in eles:
             if "name" in ele.attrs.keys() and "type" in ele.attrs.keys():
@@ -57,12 +56,12 @@ class CloudflareBypasser:
                 button.click()
 
         except Exception as e:
-            logger.error(f"Error clicking verification button: {e}")
+            logger.error(f"Error ao clicar no botão de verificação do Captcha: {e}")
 
     def is_bypassed(self):
         try:
             title = self.driver.title.lower()
-            return "just a moment" not in title or "um momento" not in title
+            return "moment" not in title
         except Exception as e:
             # self.log_message(f"Error checking page title: {e}")
             return False
@@ -73,7 +72,7 @@ class CloudflareBypasser:
 
         while not self.is_bypassed():
             if 0 < self.max_retries + 1 <= try_count:
-                logger.error("Exceeded maximum retries. Bypass failed.")
+                logger.error("Excedeu o número máximo de tentativas no captcha.")
                 break
 
             # self.log_message(f"Attempt {try_count + 1}: Verification page detected. Trying to bypass...")
