@@ -6,12 +6,13 @@ XPATH | CSS
 
 XPATH = {
     'page_verify_human': 'xpath=//p[contains(text(), "you are human")]',
-    'sucesso': 'xpath=//h1[contains(text(), "solicitada com sucesso")]'
+    'sucesso': 'xpath=//h1[contains(text(), "solicitada com sucesso")]',
+    'reportar': 'xpath=//button[span[text()="Reportar"]]'
 }
 
 CSS = {
-    'logado': 'css=div.topbar-profile',
-    'login': 'css=.btn-login',
+    'logado': 'css=div.topbar-profile, img[class*="avatar_image"]',
+    'login': 'css=.btn-login, span[class*="user-menu-unlogged"] button:last-of-type',
     'input_login': 'css=#FormFieldset-email',
     'submit': 'css=button[type="submit"]',
     'input_senha': 'css=#FormFieldset-password',
@@ -26,5 +27,9 @@ CSS = {
     'frame_recaptcha': "css=iframe[src*='recaptcha']",
     'check_captcha': 'css=#recaptcha-anchor',
     'repsonse_captcha': 'css=#g-recaptcha-response',
-    'erro': 'css=div.message-error'
+    'erro': 'css=div.message-error',
+    'mais': 'css=div[class*="layout_mainContent"] button[aria-label="Mais"]',
+    'opcao': 'css=#reportType_1 ~ label',
+    'check': 'css=.selection-control-label',
+    'btn_reportar': 'css=div.LoginRequired button'
 }

@@ -20,6 +20,12 @@ def main():
     links = carregar_links_txt(caminho_txt)
     qtde_abas = min(max_navegadores, len(links))
 
+    # Verificar se a URL é de jurisprudência
+    if 'jurisprudencia' in links[0]['url']:
+        eh_jurisprudencia = True
+    else:
+        eh_jurisprudencia = False
+
     bot = Bot(qtde_abas)
     bot.load_page(links[:qtde_abas], False)
     while 'you have been blocked' in bot.tab_principal.html:
@@ -60,14 +66,20 @@ def main():
 
             # Abre a página de remoção do nome
             bot.load_page(links[:qtde_abas], True)
-            abriu = bot.abre_remocao()
+            if eh_jurisprudencia:
+                abriu = bot.abre_remocao_jurisprudencia()
+            else:
+                abriu = bot.abre_remocao()
 
             # Se não conseguiu abrir a removção, ele vai tentar novamente.
             while not abriu:
                 bot.quit()
                 bot = Bot(qtde_abas)
                 bot.load_page(links[:qtde_abas], True)
-                abriu = bot.abre_remocao()
+                if eh_jurisprudencia:
+                    abriu = bot.abre_remocao_jurisprudencia()
+                else:
+                    abriu = bot.abre_remocao()
 
             # Preenche o formulário
             bot.preenche_formulario(links[:qtde_abas], token)
