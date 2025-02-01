@@ -183,32 +183,36 @@ class Bot():
         
         logger.info("Solicitando remoção do nome na jurisprudência.")
         
-        self.click(CSS['mais'])
-        self.sleep(2)
+        try:
+            self.click(CSS['mais'])
+            self.sleep(2)
 
-        self.click(XPATH['reportar'])
-        self.sleep(1)
+            self.click(XPATH['reportar'])
+            self.sleep(1)
 
-        self.click(CSS['opcao'])
-        self.sleep(1)
+            self.click(CSS['opcao'])
+            self.sleep(1)
 
-        self.click(CSS['check'])
+            self.click(CSS['check'])
 
-        self.click(CSS['btn_reportar'])
-        self.sleep(10)
+            self.click(CSS['btn_reportar'])
+            self.sleep(10)
 
-        cf_bypasser = CloudflareBypasser(self.tab_principal)
-        # Resolve o CAPTCHA
-        if not cf_bypasser.is_bypassed():
-            for i, page in enumerate(self.tabs):
-                cf_bypasser = CloudflareBypasser(page)
-                cf_bypasser.bypass()
-                logger.info(f"Página {i+1}: CAPTCHA resolvido")
+            cf_bypasser = CloudflareBypasser(self.tab_principal)
+            # Resolve o CAPTCHA
+            if not cf_bypasser.is_bypassed():
+                for i, page in enumerate(self.tabs):
+                    cf_bypasser = CloudflareBypasser(page)
+                    cf_bypasser.bypass()
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
-        self.sleep(3)
-        self.click(CSS['close_popup'])
-        return True
-        
+            self.sleep(3)
+            self.click(CSS['close_popup'])
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao abrir a página para remoção do nome na jurisprudência: {str(e)}")
+            return False
+
     def preenche_formulario(self, links, api_key: str):
         """
         Preenche o formulário para remoção do nome
