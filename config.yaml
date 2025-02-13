@@ -5,3 +5,4 @@ login: kiolaspbtt@hotmail.com
 senha: rilokiskps2!
 salvar_login: true
 usar_proxy: true
+resolver_captcha: true

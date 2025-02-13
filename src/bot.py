@@ -213,13 +213,14 @@ class Bot():
             logger.error(f"Erro ao abrir a página para remoção do nome na jurisprudência: {str(e)}")
             return False
 
-    def preenche_formulario(self, links, api_key: str):
+    def preenche_formulario(self, links, api_key: str, resolver_captcha: bool):
         """
         Preenche o formulário para remoção do nome
 
         Args:
             links (List[str]): Lista de links dos nomes a serem removidos.
             api_key (str): Chave da API do TwoCaptcha.
+            resolver_captcha (bool): True se o bot deve resolver o CAPTCHA automaticamente.
         """
         
         logger.info("Preenchendo formulário para remoção do nome.")
@@ -262,7 +263,16 @@ class Bot():
             self.click(CSS['checkbox'])
 
             # Resolve o reCAPTCHA
-            self.resolver_recaptcha(api_key)
+            if resolver_captcha:
+                self.resolver_recaptcha(api_key)
+            else:
+                self.sleep(2)
+
+            # Confirma
+            self.click(CSS['submit'])
+            self.tab_principal.wait.url_change('enviar')
+            logger.info("reCAPTCHA Resolvido com sucesso!")
+            self.sleep(2)
 
             # Se aparecer captcha novamente
             cf_bypasser = CloudflareBypasser(self.tab_principal)
@@ -333,10 +343,6 @@ class Bot():
             #     frame_captcha = page.ele('css=iframe[title="reCAPTCHA"]')
             #     frame_captcha.ele(CSS['check_captcha']).click()
 
-            self.click(CSS['submit'])
-            self.tab_principal.wait.url_change('enviar')
-            logger.info("reCAPTCHA Resolvido com sucesso!")
-            self.sleep(2)
             return True
         
         except Exception as e:

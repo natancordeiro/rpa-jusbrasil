@@ -15,6 +15,7 @@ def main():
     senha = config.get('senha', '')
     token = config.get('token', '')
     salvar_login = config.get('salvar_login', False)
+    resolver_captcha = config.get('resolver_captcha', False)
 
     # Carregar links a partir do arquivo
     links = carregar_links_txt(caminho_txt)
@@ -82,7 +83,7 @@ def main():
                     abriu = bot.abre_remocao()
 
             # Preenche o formulário
-            bot.preenche_formulario(links[:qtde_abas], token)
+            bot.preenche_formulario(links[:qtde_abas], token, resolver_captcha)
 
             # Se aparecer captcha novamente
             cf_bypasser = CloudflareBypasser(bot.tab_principal)
