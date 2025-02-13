@@ -20,6 +20,7 @@ CSS = {
     'close_popup': 'css=i.icon-remove',
     'select_motivo': 'css=#removal_reason',
     'outros': 'css=option[value="OUTRO"]',
+    'nome_vitima': 'css=option[value="NOME_VITIMA"]',
     'input_nome': 'css=#name_remove',
     'telefone': 'css=#telephone',
     'anexo': '#documentation',

@@ -230,7 +230,10 @@ class Bot():
             self.click(CSS['select_motivo'])
 
             # Seleciona a opção "OUTROS"
-            self.click(CSS['outros'])
+            # self.click(CSS['outros'])
+
+            # Seleciona a opção "NOME VITIMA"
+            self.click(CSS['nome_vitima'])
 
             # Preenche o nome a ser removido
             self.write(CSS['input_nome'], links, metodo='name')
