@@ -166,8 +166,11 @@ class Bot():
             # Resolve o CAPTCHA
             if not cf_bypasser.is_bypassed():
                 for i, page in enumerate(self.tabs):
-                    cf_bypasser = CloudflareBypasser(page)
-                    cf_bypasser.bypass()
+                    cf_bypasser = CloudflareBypasser(page, max_retries=3)
+                    resolveu = cf_bypasser.bypass()
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             self.sleep(3)

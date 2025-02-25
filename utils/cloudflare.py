@@ -36,7 +36,7 @@ class CloudflareBypasser:
         for ele in eles:
             if "name" in ele.attrs.keys() and "type" in ele.attrs.keys():
                 if "turnstile" in ele.attrs["name"] and ele.attrs["type"] == "hidden":
-                    button = ele.parent(timeout=20).shadow_root.child()("tag:body").shadow_root("tag:input")
+                    button = ele.parent(timeout=15).shadow_root.child()("tag:body").shadow_root("tag:input")
                     break
             
         if button:
@@ -73,7 +73,7 @@ class CloudflareBypasser:
         while not self.is_bypassed():
             if 0 < self.max_retries + 1 <= try_count:
                 logger.error("Excedeu o número máximo de tentativas no captcha.")
-                break
+                return False
 
             # self.log_message(f"Attempt {try_count + 1}: Verification page detected. Trying to bypass...")
             self.click_verification_button()
@@ -83,5 +83,7 @@ class CloudflareBypasser:
 
         if self.is_bypassed():
             logger.info("Bypass successful.")
+            return True
         else:
             logger.error("Bypass failed.")
+            return False
