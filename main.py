@@ -1,4 +1,4 @@
-from src.bot import Bot, CloudflareBypasser
+from src.bot import Bot
 
 from utils.logger_config import logger
 from utils.global_functions import *
@@ -6,7 +6,6 @@ from utils.global_functions import *
 def main():
     """Executa a navegação e processamento para uma URL específica."""
 
-    
     # Carregar configurações globais
     config = carregar_configuracao('config.yaml')
     max_navegadores = config.get('navegadores_simultaneos', 5)
@@ -22,22 +21,18 @@ def main():
     qtde_abas = min(max_navegadores, len(links))
 
     # Verificar se a URL é de jurisprudência
-    if 'jurisprudencia' in links[0]['url']:
-        eh_jurisprudencia = True
-    else:
-        eh_jurisprudencia = False
+    eh_jurisprudencia = 'jurisprudencia' in links[0]['url']
 
     bot = Bot(qtde_abas)
     bot.load_page(links[:qtde_abas], False)
+    
     while 'you have been blocked' in bot.tab_principal.html:
         logger.error("Você foi bloqueado. Tentando novamente com outro IP.")
         bot.quit()
         bot = Bot(qtde_abas)
         bot.load_page(links[:qtde_abas], False)
         
-    abriu = False
     logou = True
-
     criar_csv(bot.nome_arquivo_csv)
 
     if max_navegadores == 1:
@@ -67,31 +62,43 @@ def main():
 
             # Abre a página de remoção do nome
             bot.load_page(links[:qtde_abas], True)
-            if eh_jurisprudencia:
-                abriu = bot.abre_remocao_jurisprudencia()
-            else:
-                abriu = bot.abre_remocao()
 
-            # Se não conseguiu abrir a removção, ele vai tentar novamente.
+            abriu = bot.abre_remocao_jurisprudencia() if eh_jurisprudencia else bot.abre_remocao()
+
+            # Se não conseguiu abrir a remoção, tenta novamente até conseguir
             while not abriu:
                 bot.quit()
                 bot = Bot(qtde_abas)
                 bot.load_page(links[:qtde_abas], True)
-                if eh_jurisprudencia:
-                    abriu = bot.abre_remocao_jurisprudencia()
-                else:
-                    abriu = bot.abre_remocao()
+                abriu = bot.abre_remocao_jurisprudencia() if eh_jurisprudencia else bot.abre_remocao()
 
-            # Preenche o formulário
-            bot.preenche_formulario(links[:qtde_abas], token, resolver_captcha)
+            # Tenta preencher o formulário até que seja bem-sucedido
+            preencheu = False
+            while not preencheu:
+                preencheu = bot.preenche_formulario(links[:qtde_abas], token, resolver_captcha)
+
+                if not preencheu:
+                    logger.error("Falha ao preencher o formulário. Tentando novamente...")
+                    bot.quit()
+                    bot = Bot(qtde_abas)
+                    bot.load_page(links[:qtde_abas], True)
+
+                    abriu = bot.abre_remocao_jurisprudencia() if eh_jurisprudencia else bot.abre_remocao()
+
+                    while not abriu:
+                        bot.quit()
+                        bot = Bot(qtde_abas)
+                        bot.load_page(links[:qtde_abas], True)
+                        abriu = bot.abre_remocao_jurisprudencia() if eh_jurisprudencia else bot.abre_remocao()
 
             # Se aparecer captcha novamente
-            cf_bypasser = CloudflareBypasser(bot.tab_principal)
-            if not cf_bypasser.is_bypassed():
-                for i, page in enumerate(bot.tabs):
-                    cf_bypasser = CloudflareBypasser(page)
-                    cf_bypasser.bypass()
-                    logger.debug(f"Página {i+1}: CAPTCHA resolvido")
+            for i, page in enumerate(bot.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = bot.bypass(max_retries=3, page=page)
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             links = links[qtde_abas:]
         
@@ -104,5 +111,4 @@ def main():
         bot.quit()
 
 if __name__ == '__main__':
-    
     main()

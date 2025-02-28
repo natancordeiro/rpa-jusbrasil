@@ -2,6 +2,7 @@
 Módulo onde é guardado as funções externas para utilização geral do projeto.
 """
 
+import re
 import os
 import csv
 import yaml
@@ -63,6 +64,22 @@ def get_sitekey(url):
     
     # Retornar o valor do parâmetro 'k' (se existir)
     return parametros.get('k', [None])[0]
+
+def get_sitekey_cloudflare(url):
+    """
+    Extrai o valor do parâmetro 'cf-ray' de uma URL do CloudFlare.
+    
+    :param url: URL de onde o parâmetro será extraído.
+    :return: Valor do parâmetro 'cf-ray' ou None se não encontrado.
+    """
+
+    padrao = re.compile(r'/0x4[A-Za-z0-9]+/')
+    correspondencia = padrao.search(url)
+    
+    if correspondencia:
+        return correspondencia.group(0).strip('/')
+    
+    return None
 
 def criar_csv(nome_arquivo):
     if not os.path.exists(nome_arquivo):

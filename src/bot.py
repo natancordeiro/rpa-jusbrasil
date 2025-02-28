@@ -1,9 +1,10 @@
-from utils.cloudflare import CloudflareBypasser
 from screeninfo import get_monitors
 from twocaptcha import TwoCaptcha
 import os
 import time
 
+from DrissionPage.errors import ElementNotFoundError
+from DrissionPage.items import MixTab
 from driver.driver import Driver
 from utils.logger_config import logger
 from utils.elements import XPATH, CSS
@@ -73,6 +74,39 @@ class Bot():
     def sleep(self, tempo: float):
         time.sleep(tempo)
 
+    def is_bypassed(self, page: MixTab):
+        try:
+            title = page.title.lower()
+            return "moment" not in title
+        except Exception as e:
+            return False
+
+    def bypass(self, max_retries, page: MixTab):
+        
+        try_count = 0
+        logger.debug("Entrou no bypass")
+        while try_count < max_retries:
+
+            elemento = page.ele('css=input[name="cf_challenge_response"]', timeout=10)
+            if elemento:
+                button = elemento.parent().shadow_root.child()("tag:body").shadow_root("tag:input")
+                logger.debug("Encontrou botão de bypass.")
+                try:
+                    button.click(timeout=5)
+                except ElementNotFoundError:
+                    pass
+
+            try_count += 1
+            logger.debug(f"{try_count}° tentativa ao tentar resolver.")
+            time.sleep(5)
+
+            if 'moment' not in page.title.lower():
+                logger.info("Bypass successful.")
+                return True
+
+        logger.error("Excedeu o número máximo de tentativas no captcha.")
+        return False
+
     def click(self, tag, metodo='xpath', tempo=10):
         for tab in self.tabs:
             tab.ele(tag, timeout=tempo).click()
@@ -123,12 +157,13 @@ class Bot():
                 return False
             
             # Verifica se tem bypass captcha
-            cf_bypasser = CloudflareBypasser(self.tab_principal)
-            if not cf_bypasser.is_bypassed():
-                for i, page in enumerate(self.tabs):
-                    cf_bypasser = CloudflareBypasser(page)
-                    cf_bypasser.bypass()
-                    logger.debug(f"Página {i+1}: CAPTCHA resolvido")
+            for i, page in enumerate(self.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = self.bypass(max_retries=3, page=page)
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             # Efetua o login
             self.wait_for(CSS['login'], metodo='css')
@@ -152,29 +187,30 @@ class Bot():
         """Abre a pagina para remoção do nome."""
         
         logger.info("Solicitando remoção do nome.")
-        cf_bypasser = CloudflareBypasser(self.tab_principal)
 
         try:
             # Clica em "Reportar Página"
             self.click(CSS['btn_reportar_pagina'])
-            self.sleep(10)
+            self.sleep(20)
 
             if 'you have been blocked' in self.tab_principal.html:
                 logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
                 return False
 
-            # Resolve o CAPTCHA
-            if not cf_bypasser.is_bypassed():
-                for i, page in enumerate(self.tabs):
-                    cf_bypasser = CloudflareBypasser(page, max_retries=3)
-                    resolveu = cf_bypasser.bypass()
+            # Resolve o CAPTCHA:
+            for i, page in enumerate(self.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = self.bypass(max_retries=3, page=page)
                     if not resolveu:
                         logger.info(f"Página {i+1}: CAPTCHA não resolvido")
                         return False
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
-            self.sleep(3)
-            self.click(CSS['close_popup'])
+            self.sleep(5)
+            try:
+                self.click(CSS['close_popup'])
+            except ElementNotFoundError:
+                pass
             logger.info('Página "Remoção de informações" carregada com sucesso.')
             return True
         except Exception as e:
@@ -201,12 +237,12 @@ class Bot():
             self.click(CSS['btn_reportar'])
             self.sleep(10)
 
-            cf_bypasser = CloudflareBypasser(self.tab_principal)
-            # Resolve o CAPTCHA
-            if not cf_bypasser.is_bypassed():
-                for i, page in enumerate(self.tabs):
-                    cf_bypasser = CloudflareBypasser(page)
-                    cf_bypasser.bypass()
+            for i, page in enumerate(self.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = self.bypass(max_retries=3, page=page)
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             self.sleep(3)
@@ -227,6 +263,14 @@ class Bot():
         """
         
         logger.info("Preenchendo formulário para remoção do nome.")
+        for page in self.tabs:
+            if 'acess denied' in page.title.lower() or 'you are being rate limited' in page.html:
+                logger.error('Acesso negado. Tentando novamente com outro IP.')
+                return False
+
+        if 'you have been blocked' in self.tab_principal.html:
+            logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
+            return False
 
         try:
             # Clica em motivo
@@ -278,15 +322,16 @@ class Bot():
             self.click(CSS['submit'])
             self.tab_principal.wait.url_change('enviar')
             logger.info("reCAPTCHA Resolvido com sucesso!")
-            self.sleep(2)
+            self.sleep(10)
 
             # Se aparecer captcha novamente
-            cf_bypasser = CloudflareBypasser(self.tab_principal)
-            if not cf_bypasser.is_bypassed():
-                for i, page in enumerate(self.tabs):
-                    cf_bypasser = CloudflareBypasser(page)
-                    cf_bypasser.bypass()
-                    logger.debug(f"Página {i+1}: CAPTCHA resolvido")
+            for i, page in enumerate(self.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = self.bypass(max_retries=3, page=page)
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             # Espera a remoção ter sido solicitada
             try:
@@ -325,11 +370,6 @@ class Bot():
         solver = TwoCaptcha(api_key)
 
         try:
-            # Marca o checkbox
-            # for page in self.tabs:
-            #     frame_captcha = page.ele('css=iframe[title="reCAPTCHA"]')
-            #     frame_captcha.ele(CSS['check_captcha']).click()
-
             # Obtem as variáveis para enviar na API 2CAPTCHA
             url_recaptcha = self.tab_principal.ele(CSS['frame_recaptcha']).attrs['src']
             sitekey = get_sitekey(url_recaptcha)
@@ -345,9 +385,32 @@ class Bot():
                 page.ele(CSS['repsonse_captcha']).set.style('display', 'block')
                 page.ele(CSS['repsonse_captcha']).input(captcha_token)
 
-            # for page in self.tabs:
-            #     frame_captcha = page.ele('css=iframe[title="reCAPTCHA"]')
-            #     frame_captcha.ele(CSS['check_captcha']).click()
+            return True
+        
+        except Exception as e:
+            logger.error(f"Erro ao resolver reCAPTCHA: {e}")
+            return False
+
+    def resolver_cloudflare(self, api_key: str):
+        """
+        Resolução do reCAPTCHA.
+
+        Args:
+            api_key (str): Chave da API do TwoCaptcha.
+        """
+
+        logger.info("Resolvendo captcha Cloudflare...")
+        solver = TwoCaptcha(api_key)
+
+        try:
+            # Obtem as variáveis para enviar na API 2CAPTCHA
+            url_recaptcha = self.tab_principal.ele('tag=iframe').attrs['src']
+            sitekey = get_sitekey_cloudflare(url_recaptcha)
+            result = solver.turnstile(sitekey=sitekey, url=self.tab_principal.url)
+            solver.turnstile()
+            captcha_token = result["code"]
+            for i, page in enumerate(self.tabs):
+                page.ele('name=cf-turnstile-response').input(captcha_token)
 
             return True
         

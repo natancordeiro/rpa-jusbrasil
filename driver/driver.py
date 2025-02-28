@@ -1,5 +1,4 @@
 import os
-import re
 import logging
 import sys
 from DrissionPage import Chromium, ChromiumOptions
