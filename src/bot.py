@@ -199,9 +199,8 @@ class Bot():
                 else:
                     self.click(CSS['btn_reportar_pagina'])
             
-                tab.wait.url_change()
+                tab.wait.url_change(text='RemoveInformationTrigger', timeout=20)
 
-            self.sleep(2)
             if 'you have been blocked' in self.tab_principal.html:
                 logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
                 return False
