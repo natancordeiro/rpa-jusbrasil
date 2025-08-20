@@ -199,7 +199,7 @@ class Bot():
                 else:
                     self.click(CSS['btn_reportar_pagina'])
             
-                self.tab.wait.url_change()
+                tab.wait.url_change()
 
             self.sleep(2)
             if 'you have been blocked' in self.tab_principal.html:
