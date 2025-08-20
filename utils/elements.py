@@ -7,11 +7,11 @@ XPATH | CSS
 XPATH = {
     'page_verify_human': 'xpath=//p[contains(text(), "you are human")]',
     'sucesso': 'xpath=//h1[contains(text(), "solicitada com sucesso")]',
-    'reportar': 'xpath=//button[span[text()="Reportar"]]'
+    'reportar': 'text:Reportar'
 }
 
 CSS = {
-    'logado': 'css=div.topbar-profile, img[class*="avatar_image"]',
+    'logado': 'css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]',
     'login': 'css=.btn-login, span[class*="user-menu-unlogged"] button:last-of-type',
     'input_login': 'css=#FormFieldset-email',
     'submit': 'css=button[type="submit"]',

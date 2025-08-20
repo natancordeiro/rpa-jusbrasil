@@ -190,9 +190,18 @@ class Bot():
 
         try:
             # Clica em "Reportar Página"
-            self.click(CSS['btn_reportar_pagina'])
-            self.sleep(20)
+            for tab in self.tabs:
+                mais = tab.ele(CSS['mais'], timeout=2)
+                if mais:
+                    mais.click()
+                    tab.ele(XPATH['reportar']).click()
 
+                else:
+                    self.click(CSS['btn_reportar_pagina'])
+            
+                self.tab.wait.url_change()
+
+            self.sleep(2)
             if 'you have been blocked' in self.tab_principal.html:
                 logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
                 return False
@@ -227,7 +236,15 @@ class Bot():
             self.sleep(2)
 
             self.click(XPATH['reportar'])
-            self.sleep(1)
+            self.sleep(2)
+
+            for i, page in enumerate(self.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = self.bypass(max_retries=3, page=page)
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             self.click(CSS['opcao'])
             self.sleep(1)
