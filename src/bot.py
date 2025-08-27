@@ -167,7 +167,14 @@ class Bot():
 
             # Efetua o login
             self.wait_for(CSS['login'], metodo='css')
-            self.click(CSS['login'], metodo='css')
+            for tab in self.tabs:
+                try:
+                    tab.ele(CSS['perfil'], timeout=3).click()
+                    time.sleep(1.5)
+                    tab.ele('tag:a@text():Entrar', timeout=3).click()
+                except:
+                    self.click(CSS['login'], metodo='css')
+
             self.wait_for(CSS['input_login'], metodo='css')
             self.sleep(0.5)
             self.write(CSS['input_login'], email, metodo='css')
@@ -206,6 +213,7 @@ class Bot():
                 return False
 
             # Resolve o CAPTCHA:
+            time.sleep(5)
             for i, page in enumerate(self.tabs):
                 if 'moment' in page.title.lower():
                     resolveu = self.bypass(max_retries=3, page=page)
@@ -214,8 +222,8 @@ class Bot():
                         return False
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
-            self.sleep(5)
             try:
+                self.wait_for(CSS['close_popup'], timeout=20)
                 self.click(CSS['close_popup'])
             except ElementNotFoundError:
                 pass
@@ -311,19 +319,14 @@ class Bot():
 
             # Enviar solicitação
             self.click(CSS['submit'])
-            self.sleep(13)
+            # self.sleep(13)
             
             while self.tab_principal.states.is_loading:
                 self.sleep(1)
             
             # Fecha o Pop-up
-            self.click(CSS['close_popup'])
-
-            try:
-                for tab in self.tabs:
-                    tab.ele(CSS['close_popup'], timeout=0.1).click()
-            except:
-                pass
+            self.click(CSS['close_popup'], tempo=20)
+            time.sleep(1)
 
             # Marcar a opção do checkbox
             self.click(CSS['checkbox'])
@@ -336,9 +339,10 @@ class Bot():
 
             # Confirma
             self.click(CSS['submit'])
-            self.tab_principal.wait.url_change('enviar')
+            for tab in self.tabs:
+                tab.wait.url_change('enviar')
             logger.info("reCAPTCHA Resolvido com sucesso!")
-            self.sleep(10)
+            time.sleep(2)
 
             # Se aparecer captcha novamente
             for i, page in enumerate(self.tabs):
@@ -353,13 +357,19 @@ class Bot():
             try:
                 for i, tab in enumerate(self.tabs):
                     try:
-                        sucesso = tab.ele(XPATH['sucesso'], timeout=1)
+                        apenas_remover = tab.ele('text:Apenas remover', timeout=3)
+                        if apenas_remover:
+                            apenas_remover.click()
+                        sucesso = tab.ele(XPATH['sucesso'], timeout=10)
                         if sucesso:
                             logger.info(f"Remoção solicitada com sucesso na {i+1}° página | Nome: {links[i]['nome']}")
                             adicionar_ao_csv(self.nome_arquivo_csv, links[i]['url'], links[i]['nome'], 'SUCESSO')
                         else:
                             logger.error(f"Remoção não solicitada na {i+1}° página. | Nome: {links[i]['nome']}")
-                            erro = tab.ele(CSS['erro'], timeout=1).text
+                            if not apenas_remover:
+                                erro = tab.ele(CSS['erro'], timeout=1).text
+                            else:
+                                erro = 'Apareceu na tela o botão "Apenas remover", e não foi possível efetuar o clique nele.'
                             logger.error(f"Erro: {erro}")
                             adicionar_ao_csv(self.nome_arquivo_csv, links[i]['url'], links[i]['nome'], f'ERRO - {erro}')
                     except Exception:

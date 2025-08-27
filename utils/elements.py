@@ -11,6 +11,7 @@ XPATH = {
 }
 
 CSS = {
+    'perfil': '@aria-label=Minha conta',
     'logado': 'css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]',
     'login': 'css=.btn-login, span[class*="user-menu-unlogged"] button:last-of-type',
     'input_login': 'css=#FormFieldset-email',
