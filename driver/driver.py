@@ -1,12 +1,17 @@
 import os
 import logging
 import sys
+import subprocess
+import shutil
+import signal
+import atexit
+import time
 from DrissionPage import Chromium, ChromiumOptions
-
 from utils.global_functions import carregar_configuracao
 
 class Driver():
     """Classe para gerenciar o WebDriver e as opções do navegador."""
+    _mitm_proc = None
 
     def __init__(self, browser='chrome', headless=False, incognito=False, download_path='', remote=False, desabilitar_carregamento_imagem=False):
         """
@@ -33,6 +38,50 @@ class Driver():
             if browser == 'chrome':
                 self.make_chrome(headless, incognito, download_path, desabilitar_carregamento_imagem, remote)
 
+    def _start_mitmdump(self, upstream_host, upstream_port, user, pwd,
+                        listen_host="127.0.0.1", listen_port=8787):
+        """Sobe um mitmdump local sem autenticação e faz upstream para o proxy com user:pass."""
+
+        exe = shutil.which("mitmdump")
+        if not exe:
+            # Windows: tenta na pasta Scripts do Python atual
+            cand = os.path.join(os.path.dirname(sys.executable), "Scripts", "mitmdump.exe")
+            if os.path.exists(cand):
+                exe = cand
+        if not exe:
+            raise RuntimeError("mitmdump não encontrado mesmo após instalação.")
+
+        cmd = [
+            exe,
+            "--listen-host", listen_host,
+            "--listen-port", str(listen_port),
+            "--mode", f"upstream:http://{upstream_host}:{upstream_port}",
+            "--upstream-auth", f"{user}:{pwd}",
+            "-q",
+        ]
+        # CREATE_NEW_PROCESS_GROUP para facilitar terminar no Windows
+        creationflags = 0x00000200 if os.name == "nt" else 0
+        self._mitm_proc = subprocess.Popen(cmd, creationflags=creationflags)
+
+        # encerra no final do processo Python
+        atexit.register(self._stop_mitmproxy)
+
+        # (opcional) espera 1s para estar pronto
+        time.sleep(1)
+
+    def _stop_mitmproxy(self):
+        """Desliga o mitmdump se estiver rodando."""
+        p = getattr(self, "_mitm_proc", None)
+        if p and p.poll() is None:
+            try:
+                if os.name == "nt":
+                    p.send_signal(signal.CTRL_BREAK_EVENT)
+                    time.sleep(1)
+                p.terminate()
+            except Exception:
+                pass
+            self._mitm_proc = None
+    
     def get_download_dir(self):
         """
         Retorna o diretório padrão de downloads do sistema operacional.
@@ -64,13 +113,25 @@ class Driver():
         usar_proxy = config.get('usar_proxy', False)
 
         if usar_proxy:
+            proxy_host = config.get("proxy_host")
+            proxy_port = int(config.get("proxy_port", 0) or 0)
+            proxy_user = config.get("proxy_user")
+            proxy_pass = config.get("proxy_pass")
+            if not (proxy_host and proxy_port and proxy_user and proxy_pass):
+                raise ValueError("Configuração de proxy inválida no config.yaml (proxy_host/port/user/pass).")
+
+            self._start_mitmdump(proxy_host, proxy_port, proxy_user, proxy_pass, listen_host="127.0.0.1", listen_port=8787)
+
             co = ChromiumOptions()
-            proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
-            co.add_extension(proxy_path)
+            co.set_pref('credentials_enable_service', False)
+            co.set_proxy("http://127.0.0.1:8787")
             self.driver = Chromium(addr_or_opts=co)
         else:
             self.driver = Chromium()
 
         if not salvar_login:
             self.driver.clear_cache()
+    
+    def __del__(self):
+        self._stop_mitmproxy()
 
