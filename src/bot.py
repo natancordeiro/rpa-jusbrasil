@@ -326,10 +326,13 @@ class Bot():
             
             # Fecha o Pop-up
             self.click(CSS['close_popup'], tempo=20)
-            time.sleep(1)
+            time.sleep(4)
 
             # Marcar a opção do checkbox
-            self.click(CSS['checkbox'])
+            for tab in self.tabs:
+                while not tab.ele(CSS['checkbox']).states.is_checked:
+                    tab.ele(CSS['checkbox']).check()
+                    self.sleep(0.5)
 
             # Resolve o reCAPTCHA
             if resolver_captcha:

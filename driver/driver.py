@@ -65,6 +65,8 @@ class Driver():
 
         profile_path = os.path.expandvars(r"%USERPROFILE%\AppData\Local\Google\Chrome\User Data\Default")
         co = ChromiumOptions().set_user_data_path(profile_path)
+        co.set_pref('credentials_enable_service', False)
+        co.set_pref('profile.password_manager_enabled', False)
 
         if usar_proxy:
             proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
