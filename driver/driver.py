@@ -63,13 +63,14 @@ class Driver():
         salvar_login = config.get('salvar_login', False)
         usar_proxy = config.get('usar_proxy', False)
 
+        profile_path = os.path.expandvars(r"%USERPROFILE%\AppData\Local\Google\Chrome\User Data\Default")
+        co = ChromiumOptions().set_user_data_path(profile_path)
+
         if usar_proxy:
-            co = ChromiumOptions()
             proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
             co.add_extension(proxy_path)
-            self.driver = Chromium(addr_or_opts=co)
-        else:
-            self.driver = Chromium()
+
+        self.driver = Chromium(addr_or_opts=co)
 
         if not salvar_login:
             self.driver.clear_cache()
