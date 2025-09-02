@@ -64,14 +64,14 @@ class Driver():
         usar_proxy = config.get('usar_proxy', False)
 
         profile_path = os.path.expandvars(r"%USERPROFILE%\AppData\Local\Google\Chrome\User Data\Default")
-        co = ChromiumOptions().set_user_data_path(profile_path)
+        co = ChromiumOptions()
+        co.set_user_data_path(profile_path)
         co.set_pref('credentials_enable_service', False)
         co.set_pref('profile.password_manager_enabled', False)
 
         if usar_proxy:
-            proxy_host = config.get("proxy_host")
-            proxy_port = int(config.get("proxy_port", 0) or 0)
-            co.set_proxy(f"http://{proxy_host}:{proxy_port}")
+            proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
+            co.add_extension(proxy_path)
 
         self.driver = Chromium(addr_or_opts=co)
 
