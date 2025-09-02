@@ -69,8 +69,9 @@ class Driver():
         co.set_pref('profile.password_manager_enabled', False)
 
         if usar_proxy:
-            proxy_path = os.path.join(os.getcwd(), "utilitarios", "proxy")
-            co.add_extension(proxy_path)
+            proxy_host = config.get("proxy_host")
+            proxy_port = int(config.get("proxy_port", 0) or 0)
+            co.set_proxy(f"http://{proxy_host}:{proxy_port}")
 
         self.driver = Chromium(addr_or_opts=co)
 
