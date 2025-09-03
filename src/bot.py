@@ -3,6 +3,7 @@ from twocaptcha import TwoCaptcha
 import os
 import time
 
+from DrissionPage.common import Actions
 from DrissionPage.errors import ElementNotFoundError, ElementLostError
 from DrissionPage.items import MixTab
 from driver.driver import Driver
@@ -217,10 +218,24 @@ class Bot():
 
             # Clica em "Reportar Página"
             for tab in self.tabs:
-                mais = tab.ele(CSS['mais'], timeout=2)
+                mais = tab.ele(CSS['mais'], timeout=10)
                 if mais:
-                    mais.click()
-                    tab.ele(XPATH['reportar'], timeout=20).click()
+                    ac = Actions(tab)
+                    clicou = False
+                    tentativas = 0
+
+                    while not clicou:
+                        ac.move_to(mais).click()
+                        reportar = tab.ele(XPATH['reportar'], timeout=2)
+                        if reportar:
+                            reportar.click()
+                            clicou = True
+                        else:
+                            time.sleep(1)
+                            tentativas += 1
+                            if tentativas == 3:
+                                logger.error("Elemento 'Reportar Página' nao encontrado")
+                                return False
 
                 else:
                     self.click(CSS['btn_reportar_pagina'])
