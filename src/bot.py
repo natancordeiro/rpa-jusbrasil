@@ -62,6 +62,25 @@ class Bot():
                 tab.set.window.location(pos_x, pos_y)
                 self.tabs.append(tab)
 
+    @staticmethod
+    def go_report_via_form_submit(page):
+        """Cria e submete um <form> igual ao do site, para navegar ao 'Reportar' mantendo o Referer."""
+        js = r"""
+        (function () {
+        var f = document.createElement('form');
+        f.method = 'GET';
+        f.action = 'https://www.jusbrasil.com.br/contato/remocao';
+        var i = document.createElement('input');
+        i.type = 'hidden';
+        i.name = 'ref';
+        i.value = 'RemoveInformationTrigger';
+        f.appendChild(i);
+        document.body.appendChild(f);
+        f.submit();
+        })();
+        """
+        page.run_js(js)
+
     def load_page(self, urls, mostra_log):
         for tab, url in zip(self.tabs, urls):
             if mostra_log:
@@ -218,28 +237,7 @@ class Bot():
 
             # Clica em "Reportar Página"
             for tab in self.tabs:
-                mais = tab.ele(CSS['mais'], timeout=10)
-                if mais:
-                    ac = Actions(tab)
-                    clicou = False
-                    tentativas = 0
-
-                    while not clicou:
-                        ac.move_to(mais).click()
-                        reportar = tab.ele(XPATH['reportar'], timeout=2)
-                        if reportar:
-                            reportar.click()
-                            clicou = True
-                        else:
-                            time.sleep(1)
-                            tentativas += 1
-                            if tentativas == 3:
-                                logger.error("Elemento 'Reportar Página' nao encontrado")
-                                return False
-
-                else:
-                    self.click(CSS['btn_reportar_pagina'])
-            
+                self.go_report_via_form_submit(tab)
                 tab.wait.url_change(text='RemoveInformationTrigger', timeout=20)
 
             if 'you have been blocked' in self.tab_principal.html:
