@@ -3,7 +3,7 @@ from twocaptcha import TwoCaptcha
 import os
 import time
 
-from DrissionPage.errors import ElementNotFoundError
+from DrissionPage.errors import ElementNotFoundError, ElementLostError
 from DrissionPage.items import MixTab
 from driver.driver import Driver
 from utils.logger_config import logger
@@ -65,7 +65,7 @@ class Bot():
         for tab, url in zip(self.tabs, urls):
             if mostra_log:
                 logger.info(f"Acessando: {url['url']} para remover {url['nome']}")
-            tab.get(url['url'])
+            if url['url'] != tab.url: tab.get(url['url']) 
 
     def wait_for(self, tag, timeout=15, metodo='xpath', element_is='clickable'):
         for tab in self.tabs:
@@ -89,11 +89,14 @@ class Bot():
 
             elemento = page.ele('css=input[name="cf_challenge_response"]', timeout=10)
             if elemento:
-                button = elemento.parent().shadow_root.child()("tag:body").shadow_root("tag:input")
-                logger.debug("Encontrou botão de bypass.")
                 try:
-                    button.click(timeout=5)
-                except ElementNotFoundError:
+                    button = elemento.parent().shadow_root.child()("tag:body").shadow_root("tag:input")
+                    logger.debug("Encontrou botão de bypass.")
+                    try:
+                        button.click(timeout=5)
+                    except ElementNotFoundError:
+                        pass
+                except ElementLostError:
                     pass
 
             try_count += 1
@@ -156,7 +159,12 @@ class Bot():
                 logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
                 return False
             
+            if self.tab_principal.ele(CSS['logado'], timeout=3):
+                logger.info('Bot ja logado.')
+                return True
+            
             # Verifica se tem bypass captcha
+            time.sleep(10)
             for i, page in enumerate(self.tabs):
                 if 'moment' in page.title.lower():
                     resolveu = self.bypass(max_retries=3, page=page)
@@ -196,21 +204,6 @@ class Bot():
         logger.info("Solicitando remoção do nome.")
 
         try:
-            # Clica em "Reportar Página"
-            for tab in self.tabs:
-                mais = tab.ele(CSS['mais'], timeout=2)
-                if mais:
-                    mais.click()
-                    tab.ele(XPATH['reportar']).click()
-
-                else:
-                    self.click(CSS['btn_reportar_pagina'])
-            
-                tab.wait.url_change(text='RemoveInformationTrigger', timeout=20)
-
-            if 'you have been blocked' in self.tab_principal.html:
-                logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
-                return False
 
             # Resolve o CAPTCHA:
             time.sleep(5)
@@ -222,9 +215,38 @@ class Bot():
                         return False
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
+            # Clica em "Reportar Página"
+            for tab in self.tabs:
+                mais = tab.ele(CSS['mais'], timeout=2)
+                if mais:
+                    mais.click()
+                    tab.ele(XPATH['reportar'], timeout=20).click()
+
+                else:
+                    self.click(CSS['btn_reportar_pagina'])
+            
+                tab.wait.url_change(text='RemoveInformationTrigger', timeout=20)
+
+            if 'you have been blocked' in self.tab_principal.html:
+                logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
+                return False
+
+            # Resolve o CAPTCHA:
+            time.sleep(15)
+            for i, page in enumerate(self.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = self.bypass(max_retries=3, page=page)
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
+
             try:
-                self.wait_for(CSS['close_popup'], timeout=20)
-                self.click(CSS['close_popup'])
+                self.wait_for(CSS['close_popup'], timeout=35)
+                for tab in self.tabs:
+                    while tab.ele(CSS['close_popup']).states.is_clickable:
+                        tab.ele(CSS['close_popup']).click()
+                        time.sleep(0.5)
             except ElementNotFoundError:
                 pass
             logger.info('Página "Remoção de informações" carregada com sucesso.')
@@ -242,7 +264,7 @@ class Bot():
             self.click(CSS['mais'])
             self.sleep(2)
 
-            self.click(XPATH['reportar'])
+            self.click(XPATH['reportar'], tempo=20)
             self.sleep(2)
 
             for i, page in enumerate(self.tabs):
@@ -270,7 +292,10 @@ class Bot():
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             self.sleep(3)
-            self.click(CSS['close_popup'])
+            for tab in self.tabs:
+                while tab.ele(CSS['close_popup']).states.is_clickable:
+                    tab.ele(CSS['close_popup']).click()
+                    time.sleep(0.5)
             return True
         except Exception as e:
             logger.error(f"Erro ao abrir a página para remoção do nome na jurisprudência: {str(e)}")
@@ -295,6 +320,11 @@ class Bot():
         if 'you have been blocked' in self.tab_principal.html:
             logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
             return False
+        
+        for tab in self.tabs:
+            if 'has banned' in tab.html:
+                logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
+                return False
 
         try:
             # Clica em motivo
@@ -319,13 +349,24 @@ class Bot():
 
             # Enviar solicitação
             self.click(CSS['submit'])
-            # self.sleep(13)
-            
+            self.sleep(13)
+
+            for i, page in enumerate(self.tabs):
+                if 'moment' in page.title.lower():
+                    resolveu = self.bypass(max_retries=3, page=page)
+                    if not resolveu:
+                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+                        return False
+                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
+
             while self.tab_principal.states.is_loading:
                 self.sleep(1)
             
             # Fecha o Pop-up
-            self.click(CSS['close_popup'], tempo=20)
+            for tab in self.tabs:
+                while tab.ele(CSS['close_popup']).states.is_clickable:
+                    tab.ele(CSS['close_popup']).click()
+                    time.sleep(0.5)
             time.sleep(4)
 
             # Marcar a opção do checkbox
@@ -363,7 +404,10 @@ class Bot():
                         apenas_remover = tab.ele('text:Apenas remover', timeout=3)
                         if apenas_remover:
                             apenas_remover.click()
-                        sucesso = tab.ele(XPATH['sucesso'], timeout=10)
+                        if i > 0:
+                            sucesso = tab.ele(XPATH['sucesso'], timeout=3)
+                        else:
+                            sucesso = tab.ele(XPATH['sucesso'], timeout=10)
                         if sucesso:
                             logger.info(f"Remoção solicitada com sucesso na {i+1}° página | Nome: {links[i]['nome']}")
                             adicionar_ao_csv(self.nome_arquivo_csv, links[i]['url'], links[i]['nome'], 'SUCESSO')

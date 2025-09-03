@@ -67,8 +67,14 @@ def main():
 
             # Se não conseguiu abrir a remoção, tenta novamente até conseguir
             while not abriu:
-                bot.quit()
-                bot = Bot(qtde_abas)
+                if salvar_login:
+                    logou = False
+                    while not logou:
+                        bot.quit()
+                        bot = Bot(qtde_abas)
+                        bot.load_page(links[:qtde_abas], False)
+                        logou = bot.login(email, senha)
+
                 bot.load_page(links[:qtde_abas], True)
                 abriu = bot.abre_remocao_jurisprudencia() if eh_jurisprudencia else bot.abre_remocao()
 
