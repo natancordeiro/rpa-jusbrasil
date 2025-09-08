@@ -254,8 +254,15 @@ class Bot():
                         return False
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
+            # verifica erro "Página não disponível"
+            time.sleep(5)
+            for tab in self.tabs:
+                if 'Página não disponível' in tab.html:
+                    logger.warning('Página indisponível. Efetuando refresh.')
+                    tab.refresh()
+
             try:
-                self.wait_for(CSS['close_popup'], timeout=35)
+                self.wait_for(CSS['close_popup'], timeout=30)
                 for tab in self.tabs:
                     while tab.ele(CSS['close_popup']).states.is_clickable:
                         tab.ele(CSS['close_popup']).click()
@@ -274,27 +281,13 @@ class Bot():
         logger.info("Solicitando remoção do nome na jurisprudência.")
         
         try:
-            self.click(CSS['mais'])
-            self.sleep(2)
+            for tab in self.tabs:
+                self.go_report_via_form_submit(tab)
+                tab.wait.url_change(text='RemoveInformationTrigger', timeout=20)
 
-            self.click(XPATH['reportar'], tempo=20)
-            self.sleep(2)
-
-            for i, page in enumerate(self.tabs):
-                if 'moment' in page.title.lower():
-                    resolveu = self.bypass(max_retries=3, page=page)
-                    if not resolveu:
-                        logger.info(f"Página {i+1}: CAPTCHA não resolvido")
-                        return False
-                    logger.info(f"Página {i+1}: CAPTCHA resolvido")
-
-            self.click(CSS['opcao'])
-            self.sleep(1)
-
-            self.click(CSS['check'])
-
-            self.click(CSS['btn_reportar'])
-            self.sleep(10)
+            if 'you have been blocked' in self.tab_principal.html:
+                logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
+                return False
 
             for i, page in enumerate(self.tabs):
                 if 'moment' in page.title.lower():
@@ -303,10 +296,33 @@ class Bot():
                         logger.info(f"Página {i+1}: CAPTCHA não resolvido")
                         return False
                     logger.info(f"Página {i+1}: CAPTCHA resolvido")
+
+            # verifica erro "Página não disponível"
+            time.sleep(5)
+            for tab in self.tabs:
+                if 'Página não disponível' in tab.html:
+                    logger.warning('Página indisponível. Efetuando refresh.')
+                    tab.refresh()
+
+            # self.click(CSS['opcao'])
+            # self.sleep(1)
+
+            # self.click(CSS['check'])
+
+            # self.click(CSS['btn_reportar'])
+            # self.sleep(10)
+
+            # for i, page in enumerate(self.tabs):
+            #     if 'moment' in page.title.lower():
+            #         resolveu = self.bypass(max_retries=3, page=page)
+            #         if not resolveu:
+            #             logger.info(f"Página {i+1}: CAPTCHA não resolvido")
+            #             return False
+            #         logger.info(f"Página {i+1}: CAPTCHA resolvido")
 
             self.sleep(3)
             for tab in self.tabs:
-                while tab.ele(CSS['close_popup']).states.is_clickable:
+                while tab.ele(CSS['close_popup'], timeout=20).states.is_clickable:
                     tab.ele(CSS['close_popup']).click()
                     time.sleep(0.5)
             return True
@@ -341,7 +357,7 @@ class Bot():
 
         try:
             # Clica em motivo
-            self.click(CSS['select_motivo'])
+            self.click(CSS['select_motivo'], tempo=20)
 
             # Seleciona a opção "OUTROS"
             # self.click(CSS['outros'])
@@ -377,7 +393,7 @@ class Bot():
             
             # Fecha o Pop-up
             for tab in self.tabs:
-                while tab.ele(CSS['close_popup']).states.is_clickable:
+                while tab.ele(CSS['close_popup'], timeout=20).states.is_clickable:
                     tab.ele(CSS['close_popup']).click()
                     time.sleep(0.5)
             time.sleep(4)
