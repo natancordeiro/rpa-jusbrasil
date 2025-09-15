@@ -1,12 +1,14 @@
-navegadores_simultaneos: 1
+# Configurações gerais
+threads: 4
 arquivo_input: dados.txt
-token: 29cfd95b1e9c6a0d72d8ae935595aeda
-login: kiolaspbtt@hotmail.com
-senha: rilokiskps2!
-salvar_login: false
-resolver_captcha: false
+timeout_padrao: 25
+headless: false
+salvar_capturas: false
+
+# Login
+login_email: "kiolaspbtt@hotmail.com"
+login_senha: "rilokiskps2!"
+
+# Proxy
 usar_proxy: true
-proxy_host: 43.152.113.55
-proxy_port: 2334
-proxy_user: u5d07236857af05c7-zone-custom
-proxy_pass: u5d07236857af05c7
+proxy_extension_path: "./utilitarios/proxy"
