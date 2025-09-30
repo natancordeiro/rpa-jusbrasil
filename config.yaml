@@ -1,5 +1,5 @@
 # Configurações gerais
-threads: 4
+threads: 1
 arquivo_input: dados.txt
 timeout_padrao: 25
 headless: false

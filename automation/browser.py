@@ -9,6 +9,7 @@ class BrowserFactory:
     def new_browser(cfg: dict, user_data_dir: Optional[str] = None) -> Chromium:
         co = ChromiumOptions()
         co.auto_port()
+        co.set_pref('credentials_enable_service', False)
 
         if cfg.get("headless", False):
             co.headless(True)
@@ -25,9 +26,9 @@ class BrowserFactory:
         return browser.latest_tab
 
     @staticmethod
-    def recreate(prev_page: ChromiumPage, use_proxy: bool, proxy_extension_path: str | None) -> ChromiumPage:
+    def recreate(prev_page: ChromiumPage, cfg: dict) -> ChromiumPage:
         try:
             prev_page.browser.quit()
         except Exception:
             pass
-        return BrowserFactory.new_browser(use_proxy, proxy_extension_path)
+        return BrowserFactory.new_browser(cfg)

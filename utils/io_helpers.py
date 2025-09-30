@@ -26,10 +26,22 @@ def init_results():
             w = csv.writer(f)
             w.writerow(["quando", "url", "nome", "status", "mensagem"])
 
-def append_result(url: str, nome: str, status: str, msg: str) -> None:
+def append_result(url: str, nome: str, status: str, msg: str, idx: int | None = None) -> None:
     write_header = not RESULTS.exists()
     with RESULTS.open("a", newline="", encoding="utf-8") as f:
         w = csv.writer(f, delimiter=";")
         if write_header:
             w.writerow(["data_hora", "url", "nome", "status", "msg"])
         w.writerow([datetime.now().isoformat(timespec="seconds"), url, nome, status, msg])
+
+    # --- apenas console (não afeta app.log) ---
+    if idx is None or idx == 0:
+        idx_txt = "?"
+    else:
+        idx_txt = str(idx)
+
+    ok = (status or "").strip().upper() in {"OK", "SUCESSO", "REMOVIDO", "SUCESSO_FORM", "SUCESSO_REMOCAO"}
+    if ok:
+        print(f"Removido com sucesso link {idx_txt} {url}", flush=True)
+    else:
+        print(f"Falha na remoção link {idx_txt} {url} ({status})", flush=True)

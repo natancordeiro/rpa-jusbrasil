@@ -25,11 +25,7 @@ class Worker(threading.Thread):
 
     def _restart_browser(self):
         logger.warning(f"[{self.name}] Reiniciando navegador para trocar IP/porta…")
-        self.page = BrowserFactory.recreate(
-            prev_page=self.page,
-            use_proxy=self.cfg.get('usar_proxy', False),
-            proxy_extension_path=self.cfg.get('proxy_extension_path'),
-        )
+        self.page = BrowserFactory.recreate(prev_page=self.page,cfg=self.cfg)
         logger.info(f"[{self.name}] Chromium recriado.")
 
     def run(self):
@@ -43,6 +39,19 @@ class Worker(threading.Thread):
         while True:
             try:
                 job = self.jobs.get(timeout=1)
+                if isinstance(job, (list, tuple)):
+                    if len(job) == 3:
+                        idx, url, nome = job
+                    else:
+                        url, nome = job
+                        idx = 0
+                else:
+                    # se for dict, aceita também (retrocompatível)
+                    idx = int(job.get("idx", 0))
+                    url = job["url"]
+                    nome = job["nome"]
+
+                print(f"link {idx} {url}", flush=True)
             except Exception:
                 break
 
@@ -58,8 +67,7 @@ class Worker(threading.Thread):
                 try:
                     client = JusbrasilClient(
                         page=self.page,
-                        salvar_capturas=self.cfg.get('salvar_capturas', False),
-                        evid_dir=self.cfg.get('evid_dir', 'output/screenshots'),
+                        cfg=self.cfg
                     )
                     res = client.submit_removal_form(url, nome)
 
@@ -68,7 +76,7 @@ class Worker(threading.Thread):
                         time.sleep(2)
                         continue
 
-                    append_result(url, nome, res.status, res.msg)
+                    append_result(url, nome, res.status, res.msg, idx=idx)
                     break
 
                 except BlockedError:
@@ -78,11 +86,11 @@ class Worker(threading.Thread):
 
                 except Exception as e:
                     logger.error(f"[{self.name}] Erro inesperado: {e}")
-                    append_result(url, nome, "ERRO", str(e))
+                    append_result(url, nome, "ERRO", str(e), idx=idx)
                     break
 
             else:
-                append_result(url, nome, "ERRO", "Esgotadas as tentativas de processamento para este item.")
+                append_result(url, nome, "ERRO", "Esgotadas as tentativas de processamento para este item.", idx=idx)
 
             self.jobs.task_done()
 

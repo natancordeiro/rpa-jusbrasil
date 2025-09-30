@@ -6,7 +6,7 @@ from typing import Optional
 from DrissionPage import ChromiumPage
 from utils.logger import logger
 from utils.cf_bypass import CloudflareBypasser
-
+from automation.login import try_login
 
 class BlockedError(Exception):
     """Levanta quando o site bloqueia o IP (precisa reiniciar o navegador)."""
@@ -20,10 +20,11 @@ class SubmitResult:
 
 
 class JusbrasilClient:
-    def __init__(self, page: ChromiumPage, salvar_capturas: bool = False, evid_dir: Optional[str] = None):
+    def __init__(self, page: ChromiumPage, cfg: dict):
+        self.cfg = cfg
         self.page = page
-        self.salvar_capturas = salvar_capturas
-        self.evid_dir = evid_dir or "output/screenshots"
+        self.salvar_capturas = self.cfg.get('salvar_capturas', False)
+        self.evid_dir = self.cfg.get('evid_dir', 'output/screenshots')
 
     # ---------- helpers ----------
 
@@ -153,6 +154,11 @@ class JusbrasilClient:
             time.sleep(1.5)
             self._check_blockers_and_recover()
 
+            # 1.5) Verifica se está logado, e refaz o login
+            logado = self.page.ele('css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]', timeout=15)
+            if not logado:
+                ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
+
             # 2) Vá para o formulário
             self._go_report_via_form_submit()
 
@@ -164,7 +170,7 @@ class JusbrasilClient:
 
             # 4) Preenche os campos do formulário (mapeados como no projeto antigo)
             try:
-                close_popup = self.page.ele('css=i.icon-remove').wait.clickable(timeout=15)
+                close_popup = self.page.ele('css=i.icon-remove', timeout=30).wait.clickable(timeout=15)
                 if close_popup:
                     close_popup.click()
                     self.page.wait(0.5)
@@ -235,7 +241,7 @@ class JusbrasilClient:
             self._wait_cloudflare_and_bypass()
 
             try:
-                close_popup = self.page.ele('css=i.icon-remove').wait.clickable(timeout=15)
+                close_popup = self.page.ele('css=i.icon-remove', timeout=30).wait.clickable(timeout=15)
                 if close_popup:
                     close_popup.click()
                     self.page.wait(0.5)
@@ -285,7 +291,7 @@ class JusbrasilClient:
 
             # Página de erro
             if seletor == 'css=div.message-error':
-                logger.error("[submit_removal_form] Erro de validação no formulário.")
+                logger.error(f"[submit_removal_form] Erro de validação no formulário: {elemento.text}")
                 return SubmitResult(False, "ERRO_VALIDACAO", f"Erro de validação no formulário: {elemento.text}")
             
             # Página sem confirmação

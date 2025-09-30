@@ -32,7 +32,8 @@ def _build_logger() -> logging.Logger:
     fh.setLevel(LOG_LEVEL)
     fh.setFormatter(fmt)
 
-    lg.addHandler(sh)
+    # desabilitar saída no console
+    # lg.addHandler(sh)
     lg.addHandler(fh)
     lg.propagate = False
     return lg

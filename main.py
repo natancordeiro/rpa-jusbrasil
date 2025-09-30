@@ -13,10 +13,12 @@ def main():
         return
 
     init_results()
+    print("Iniciando processamento...")
 
     q = Queue()
-    for job in jobs:
-        q.put(job)
+    for idx, job in enumerate(jobs, start=1):
+        url, nome = job
+        q.put((idx, url, nome))
 
     n_threads = max(1, int(cfg.get("threads", 2)))
     workers = [Worker(i + 1, q, cfg, name=f"T{i+1}") for i in range(n_threads)]
@@ -31,6 +33,7 @@ def main():
         w.join(timeout=2.0)
 
     logger.info("Processamento concluído. Veja output/resultados.csv")
+    print("Processamento concluído. Veja output/resultados.csv")
 
 if __name__ == "__main__":
     main()
