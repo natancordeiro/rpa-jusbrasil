@@ -162,7 +162,7 @@ class JusbrasilClient:
             # 2) Vá para o formulário
             self._go_report_via_form_submit()
 
-            time.sleep(1.0)
+            time.sleep(1)
 
             # 3) Checagens de bloqueio/página indisponível e Cloudflare novamente
             self._check_blockers_and_recover()

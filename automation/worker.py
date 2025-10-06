@@ -55,8 +55,6 @@ class Worker(threading.Thread):
             except Exception:
                 break
 
-            url = job[0]
-            nome = job[1]
             attempts = 0
             max_attempts = int(self.cfg.get('max_attempts_por_job', 3))
 
@@ -95,7 +93,16 @@ class Worker(threading.Thread):
             self.jobs.task_done()
 
         try:
+            self.logout()
             self.page.browser.quit()
         except Exception:
             pass
         logger.info(f"[{self.name}] Finalizado.")
+
+    def logout(self):
+        try:
+            self.page.get("https://www.jusbrasil.com.br/logout")
+            logger.info("[logout] Sessão encerrada.")
+            time.sleep(0.5)
+        except Exception:
+            pass
