@@ -170,8 +170,9 @@ class JusbrasilClient:
 
             # 4) Preenche os campos do formulário (mapeados como no projeto antigo)
             try:
-                close_popup = self.page.ele('css=i.icon-remove', timeout=30).wait.clickable(timeout=15)
+                close_popup = self.page.ele('css=i.icon-remove', timeout=30)
                 if close_popup:
+                    close_popup.wait.clickable(timeout=15)
                     close_popup.click()
                     self.page.wait(0.5)
             except Exception as e:
@@ -241,8 +242,9 @@ class JusbrasilClient:
             self._wait_cloudflare_and_bypass()
 
             try:
-                close_popup = self.page.ele('css=i.icon-remove', timeout=30).wait.clickable(timeout=15)
+                close_popup = self.page.ele('css=i.icon-remove', timeout=30)
                 if close_popup:
+                    close_popup.wait.clickable(timeout=15)
                     close_popup.click()
                     self.page.wait(0.5)
             except Exception as e:
