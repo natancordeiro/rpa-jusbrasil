@@ -173,8 +173,9 @@ class JusbrasilClient:
                 close_popup = self.page.ele('css=i.icon-remove', timeout=30)
                 if close_popup:
                     close_popup.wait.clickable(timeout=15)
-                    close_popup.click()
-                    self.page.wait(0.5)
+                    if close_popup.states.has_rect:
+                        close_popup.click()
+                        self.page.wait(0.5)
             except Exception as e:
                 logger.error(f"[submit_removal_form] Erro ao fechar popup: {type(e).__name__}: {e}")
 
@@ -245,8 +246,9 @@ class JusbrasilClient:
                 close_popup = self.page.ele('css=i.icon-remove', timeout=30)
                 if close_popup:
                     close_popup.wait.clickable(timeout=15)
-                    close_popup.click()
-                    self.page.wait(0.5)
+                    if close_popup.states.has_rect:
+                        close_popup.click()
+                        self.page.wait(0.5)
             except Exception as e:
                 logger.error(f"[submit_removal_form] Erro ao fechar popup: {type(e).__name__}: {e}")
 
