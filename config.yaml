@@ -6,8 +6,9 @@ headless: false
 salvar_capturas: false
 
 # Login
-login_email: "josesilvanio20251@hotmail.com"
-login_senha: "sucesso1"
+login_email: "o.natan1907@gmail.com"
+login_senha: "Natan@11"
+login_refresh_interval: 3
 
 # Proxy
 usar_proxy: true

@@ -25,6 +25,8 @@ class JusbrasilClient:
         self.page = page
         self.salvar_capturas = self.cfg.get('salvar_capturas', False)
         self.evid_dir = self.cfg.get('evid_dir', 'output/screenshots')
+        self.login_refresh_interval = self.cfg.get("login_refresh_interval", 10)
+        self.remocoes_contador = 0
 
     # ---------- helpers ----------
 
@@ -55,6 +57,21 @@ class JusbrasilClient:
             logger.warning('Página indisponível. Efetuando refresh.')
             try:
                 self.page.refresh()
+                time.sleep(3)
+
+                # 🔍 Após refresh, o site às vezes faz logout.
+                logado = self.page.ele(
+                    'css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]',
+                    timeout=10
+                )
+                if not logado:
+                    logger.warning("Sessão desconectada após erro de página. Reautenticando...")
+                    ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
+                    if not ok:
+                        logger.error("Falha ao relogar na conta.")
+                    else:
+                        logger.info("Login restaurado com sucesso após desconexão.")
+
             except Exception as e:
                 logger.warning(f"Falha ao dar refresh na aba: {e}")
 
@@ -233,13 +250,55 @@ class JusbrasilClient:
 
             if resp_envio.status_code == 200:
                 logger.info("Remoção bem-sucedida.")
+
+                # 🔁 Controle de logout/login periódico
+                self.remocoes_contador += 1
+                if self.remocoes_contador >= self.login_refresh_interval:
+                    logger.info(f"{self.remocoes_contador} remoções realizadas. Renovando login...")
+                    self.remocoes_contador = 0
+
+                    try:
+                        # Logout manual — geralmente via URL ou botão
+                        self.page.get(f"{BASE_URL}/logout")
+                        time.sleep(2)
+
+                        ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
+                        if ok:
+                            logger.info("Login renovado com sucesso.")
+                        else:
+                            logger.error("Falha ao renovar login automaticamente.")
+                    except Exception as e:
+                        logger.error(f"Erro ao renovar login: {e}")
+
                 return SubmitResult(ok=True, status="SUCESSO", msg="Remoção concluída com sucesso")
+            
             elif resp_envio.status_code == 409:
                 soup = BeautifulSoup(resp_envio.text, "html.parser")
                 msg_erro = soup.find("div", {"class": "message-error"})
                 erro_texto = msg_erro.text.strip() if msg_erro else "Erro desconhecido"
                 logger.warning(f"Remoção não concluída (já solicitada?): {erro_texto}")
+
+                # 🔁 Controle de logout/login periódico
+                self.remocoes_contador += 1
+                if self.remocoes_contador >= self.login_refresh_interval:
+                    logger.info(f"{self.remocoes_contador} remoções realizadas. Renovando login...")
+                    self.remocoes_contador = 0
+
+                    try:
+                        # Logout manual — geralmente via URL ou botão
+                        self.page.get(f"{BASE_URL}/logout")
+                        time.sleep(2)
+
+                        ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
+                        if ok:
+                            logger.info("Login renovado com sucesso.")
+                        else:
+                            logger.error("Falha ao renovar login automaticamente.")
+                    except Exception as e:
+                        logger.error(f"Erro ao renovar login: {e}")
+
                 return SubmitResult(ok=False, status="ERRO_VALIDACAO", msg=erro_texto)
+            
             else:
                 logger.error(f"Erro inesperado na remoção. Status {resp_envio.status_code}")
                 return SubmitResult(ok=False, status=str(resp_envio.status_code), msg="Erro inesperado")
