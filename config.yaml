@@ -6,8 +6,8 @@ headless: false
 salvar_capturas: false
 
 # Login
-login_email: "albertoramanmelo@hotmail.com"
-login_senha: "sucesso1234"
+login_email: "josesilvanio20251@hotmail.com"
+login_senha: "sucesso1"
 
 # Proxy
 usar_proxy: true

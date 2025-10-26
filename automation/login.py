@@ -30,6 +30,6 @@ def try_login(page: ChromiumPage, email: str, senha: str) -> bool:
         btn = page.ele('xpath://button[.//text()[contains(., "Entrar") or contains(., "Continuar") or contains(., "Login")]] | //input[@type="submit"]', timeout=3)
         if btn: btn.click()
         page.wait.doc_loaded()
-        time.sleep(1.5)
+        time.sleep(5)
     html = (page.html or "").lower()
     return ("sair" in html) or ("minha conta" in html) or ("perfil" in html)
