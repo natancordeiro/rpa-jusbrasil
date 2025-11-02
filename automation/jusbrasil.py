@@ -25,8 +25,6 @@ class JusbrasilClient:
         self.page = page
         self.salvar_capturas = self.cfg.get('salvar_capturas', False)
         self.evid_dir = self.cfg.get('evid_dir', 'output/screenshots')
-        self.login_refresh_interval = self.cfg.get("login_refresh_interval", 10)
-        self.remocoes_contador = 0
 
     # ---------- helpers ----------
 
@@ -250,26 +248,6 @@ class JusbrasilClient:
 
             if resp_envio.status_code == 200:
                 logger.info("Remoção bem-sucedida.")
-
-                # 🔁 Controle de logout/login periódico
-                self.remocoes_contador += 1
-                if self.remocoes_contador >= self.login_refresh_interval:
-                    logger.info(f"{self.remocoes_contador} remoções realizadas. Renovando login...")
-                    self.remocoes_contador = 0
-
-                    try:
-                        # Logout manual — geralmente via URL ou botão
-                        self.page.get(f"{BASE_URL}/logout")
-                        time.sleep(2)
-
-                        ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
-                        if ok:
-                            logger.info("Login renovado com sucesso.")
-                        else:
-                            logger.error("Falha ao renovar login automaticamente.")
-                    except Exception as e:
-                        logger.error(f"Erro ao renovar login: {e}")
-
                 return SubmitResult(ok=True, status="SUCESSO", msg="Remoção concluída com sucesso")
             
             elif resp_envio.status_code == 409:
@@ -277,26 +255,6 @@ class JusbrasilClient:
                 msg_erro = soup.find("div", {"class": "message-error"})
                 erro_texto = msg_erro.text.strip() if msg_erro else "Erro desconhecido"
                 logger.warning(f"Remoção não concluída (já solicitada?): {erro_texto}")
-
-                # 🔁 Controle de logout/login periódico
-                self.remocoes_contador += 1
-                if self.remocoes_contador >= self.login_refresh_interval:
-                    logger.info(f"{self.remocoes_contador} remoções realizadas. Renovando login...")
-                    self.remocoes_contador = 0
-
-                    try:
-                        # Logout manual — geralmente via URL ou botão
-                        self.page.get(f"{BASE_URL}/logout")
-                        time.sleep(2)
-
-                        ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
-                        if ok:
-                            logger.info("Login renovado com sucesso.")
-                        else:
-                            logger.error("Falha ao renovar login automaticamente.")
-                    except Exception as e:
-                        logger.error(f"Erro ao renovar login: {e}")
-
                 return SubmitResult(ok=False, status="ERRO_VALIDACAO", msg=erro_texto)
             
             else:

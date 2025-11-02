@@ -45,3 +45,16 @@ def append_result(url: str, nome: str, status: str, msg: str, idx: int | None = 
         print(f"Removido com sucesso link {idx_txt} {url}", flush=True)
     else:
         print(f"Falha na remoção link {idx_txt} {url} ({status})", flush=True)
+
+def get_failed_results(output_file="output/resultados.txt"):
+    """Retorna lista de (url, nome) que falharam (exclui SUCESSO e ERRO_VALIDACAO)."""
+    erros = []
+    with open(output_file, "r", encoding="utf-8") as f:
+        for line in f:
+            partes = line.strip().split(";")
+            if len(partes) < 4:
+                continue
+            url, nome, status, msg = partes[:4]
+            if status not in ("SUCESSO", "ERRO_VALIDACAO"):
+                erros.append((url, nome))
+    return erros

@@ -4,9 +4,11 @@ import signal, sys
 
 from utils.logger import logger
 from utils.config import load_config
-from utils.io_helpers import read_jobs, init_results
+from utils.io_helpers import read_jobs, init_results, get_failed_results, append_result
 from automation.worker import Worker
-
+from automation.jusbrasil import JusbrasilClient
+from automation.login import try_login
+from automation.browser import BrowserFactory
 
 def main():
     cfg = load_config("config.yaml")
@@ -84,6 +86,27 @@ def main():
 
     logger.info("Processamento concluído. Veja output/resultados.csv")
     print("Processamento concluído. Veja output/resultados.csv")
+    
+    falhas = get_failed_results("output/resultados.csv")
+    if falhas:
+        logger.info(f"{len(falhas)} registros falharam e serão reprocessados.")
+        page = BrowserFactory.new_browser(cfg)
+        try_login(page, cfg["login_email"], cfg["login_senha"])
+        client = JusbrasilClient(page=page, cfg=cfg)
+
+        for url, nome in falhas:
+            logger.info(f"Reprocessando: {nome}")
+            try:
+                res = client.submit_removal_form(url, nome)
+                append_result(url, nome, res.status, f"Reprocessado: {res.msg}")
+            except Exception as e:
+                logger.error(f"Erro ao reprocessar {nome}: {e}")
+                append_result(url, nome, "ERRO_REPROCESSAMENTO", str(e))
+
+        logger.info("Reprocessamento concluído.")
+        page.browser.quit()
+    else:
+        logger.info("Nenhuma falha encontrada para reprocessar.")
 
 
 if __name__ == "__main__":
