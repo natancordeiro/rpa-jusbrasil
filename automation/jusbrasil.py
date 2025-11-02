@@ -38,10 +38,10 @@ class JusbrasilClient:
         except Exception as e:
             logger.warning(f"Falha ao salvar screenshot: {e}")
 
-    def _check_blockers_and_recover(self) -> None:
+    def _check_blockers_and_recover(self, job_url: str | None = None) -> None:
         """Replica as verificações do projeto base:
-           - bloqueio ('you have been blocked') => BlockedError
-           - 'Página não disponível' => refresh nas abas
+        - bloqueio ('you have been blocked') => BlockedError
+        - 'Página não disponível' => recupera sessão e volta ao job_url
         """
         html = (self.page.html or "").lower()
 
@@ -51,27 +51,41 @@ class JusbrasilClient:
             logger.error('Bloqueado pelo site. Tentando novamente com outro IP.')
             raise BlockedError('IP bloqueado / Access denied')
 
+        # 2) Página não disponível => volta para a URL do job e revalida sessão
         if 'Página não disponível' in html or 'página não disponível' in html.lower():
-            logger.warning('Página indisponível. Efetuando refresh.')
+            logger.warning('Página indisponível detectada. Recarregando URL do job e validando sessão.')
             try:
-                self.page.refresh()
-                time.sleep(3)
+                if job_url:
+                    # 1) Volta para a URL do job
+                    self.page.get(job_url)
+                    self.page.wait.doc_loaded()
+                    time.sleep(1.5)
 
-                # 🔍 Após refresh, o site às vezes faz logout.
+                # 2) Verifica se está logado
                 logado = self.page.ele(
                     'css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]',
                     timeout=10
                 )
                 if not logado:
-                    logger.warning("Sessão desconectada após erro de página. Reautenticando...")
-                    ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
+                    logger.warning("Sessão desconectada. Reautenticando via try_login()...")
+                    ok = try_login(self.page, self.cfg.get("login_email", ""), self.cfg.get("login_senha", ""))
                     if not ok:
                         logger.error("Falha ao relogar na conta.")
                     else:
-                        logger.info("Login restaurado com sucesso após desconexão.")
-
+                        logger.info("Login restaurado com sucesso.")
+                        # 3) Depois de logar, tenta novamente a mesma URL do job
+                        if job_url:
+                            self.page.get(job_url)
+                            self.page.wait.doc_loaded()
+                            time.sleep(1.5)
+                else:
+                    # Já estava logado; garanta que está na URL do job
+                    if job_url:
+                        self.page.get(job_url)
+                        self.page.wait.doc_loaded()
+                        time.sleep(1.5)
             except Exception as e:
-                logger.warning(f"Falha ao dar refresh na aba: {e}")
+                logger.warning(f"Falha ao recuperar após 'Página não disponível': {e}")
 
     def _wait_cloudflare_and_bypass(self) -> bool:
         """Verifica se alguma aba está no 'Just a moment...' e tenta resolver via self.bypass()."""
@@ -169,7 +183,7 @@ class JusbrasilClient:
             # 1) Abre a página original (onde aparece o nome)
             self.page.get(diario_url)
             time.sleep(1.5)
-            self._check_blockers_and_recover()
+            self._check_blockers_and_recover(diario_url)
 
             # 1.5) Verifica se está logado, e refaz o login
             logado = self.page.ele('css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]', timeout=15)
@@ -182,7 +196,7 @@ class JusbrasilClient:
             time.sleep(1)
 
             # 3) Checagens de bloqueio/página indisponível e Cloudflare novamente
-            self._check_blockers_and_recover()
+            self._check_blockers_and_recover(diario_url)
             self._wait_cloudflare_and_bypass()
 
             telefone = self._random_phone()

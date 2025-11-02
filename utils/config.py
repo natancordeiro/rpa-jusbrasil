@@ -13,6 +13,7 @@ def load_config(path: str = "config.yaml") -> dict:
     cfg.setdefault("proxy_extension_path", "")
     cfg.setdefault("porta_inicial", 53000)
     cfg.setdefault("porta_final", 60000)
-    cfg.setdefault("login_email", "")
-    cfg.setdefault("login_senha", "")
+    cfg.setdefault("mail_user_email", "")
+    cfg.setdefault("mail_app_password", "")
+    cfg.setdefault("imap_server", "imap.gmail.com")
     return cfg
