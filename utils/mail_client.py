@@ -1,150 +1,164 @@
-import imaplib
-import email
-from email.header import decode_header
-import time
-import random
-import string
+# utils/mails_dp.py
+from __future__ import annotations
+from typing import Callable, Dict, Any, Optional
+from DrissionPage import Chromium
+import json
+
+TARGETS = [
+    '/api/email/generate',
+    '/api/email/inbox',
+    '/api/email/inbox/read',
+    '/api/captcha/verify',
+    '/api/nonce'
+]
+
+def _to_json(body) -> Dict[str, Any]:
+    if body is None:
+        return {}
+    if isinstance(body, (bytes, bytearray)):
+        try:
+            return json.loads(body.decode('utf-8', 'ignore'))
+        except Exception:
+            return {}
+    if isinstance(body, str):
+        try:
+            return json.loads(body)
+        except Exception:
+            return {}
+    # alguns builds expõem body já como dict
+    if isinstance(body, dict):
+        return body
+    return {}
+
+def _pick_email_from_inbox(data: Dict[str, Any], want: Callable[[Dict[str, Any]], bool] | None = None):
+    """Normaliza o shape do mails.org (emails: dict[id]->obj) e aplica um predicate opcional."""
+    if not isinstance(data, dict) or not isinstance(data.get('emails'), dict):
+        return None
+    items = []
+    for mid, m in data['emails'].items():
+        if not isinstance(m, dict):
+            continue
+        subj = m.get('subject') or ''
+        sndr = m.get('sender') or ''
+        date = m.get('received_at') or m.get('date') or ''
+        raw_body = m.get('body') or ''
+        masked = (subj == 'Subject hidden until verification')
+        item = {
+            'id': str(mid),
+            'subject': subj,
+            'from': sndr,
+            'date': date,
+            'body': raw_body or '',
+            'masked': bool(masked),
+            'captcha': m.get('captcha'),
+            '_raw': m,
+        }
+        items.append(item)
+    # aplica filtro se houver
+    if want:
+        for it in items:
+            if want(it):
+                return it
+        return None
+    # se não houver filtro, devolve o mais recente que não esteja mascarado (se existir)
+    for it in items:
+        if not it['masked']:
+            return it
+    return items[0] if items else None
 
 class MailClient:
-    def __init__(self, user_email, app_password, imap_server='imap.gmail.com'):
-        self.user_email = user_email
-        self.app_password = app_password
-        self.imap_server = imap_server
-        self.mail = None
+    """
+    Controla a aba do mails.org e ouve as respostas via listener oficial do DrissionPage.
+    - wait_email_generated(): espera o /api/email/generate e devolve email + payload inteiro
+    - wait_verification_message(): espera inbox até achar a mensagem desejada; se vier mascarada,
+      continua ouvindo até chegar o /api/email/inbox/read correspondente.
+    """
+    def __init__(self, browser: Chromium):
+        self.browser = browser
+        self.tab = self.browser.new_tab()
+        self.tab.listen.start('/api/email/generate')
+        self.tab.get('https://mails.org/')
+        # self.tab.listen.start(TARGETS)
 
-    def connect(self):
-        self.mail = imaplib.IMAP4_SSL(self.imap_server)
-        self.mail.login(self.user_email, self.app_password)
+        self.generated_email: Optional[str] = None
+        self._mailbox_token: Optional[str] = None
 
-    def gerar_alias_gmail(self, base_email=None, tamanho_tag=10):
+    # -------- geração do alias --------
+    def wait_email_generated(self, timeout: float = 30.0) -> str:
         """
-        Gera um alias para Gmail no formato usuario+tag@gmail.com.
-        Por padrão usa o user_email da instância, mas pode receber outro.
+        Espera pela resposta do /api/email/generate e devolve o e-mail gerado.
         """
-        email_to_use = base_email or self.user_email
+        # já estamos em mails.org; a própria página costuma disparar nonce->generate no carregamento
+        # vamos iterar pacotes até achar o generate
+        packet = self.tab.listen.wait(timeout=timeout)
+        data = _to_json(packet.response.body)
+        email = data.get('email') or data.get('address')
+        self.tab.listen.stop()
+        if email:
+            self.generated_email = email
+            self._mailbox_token = data.get('token') or self._mailbox_token
+            return self.generated_email or ""
 
-        if '@' not in email_to_use:
-            raise ValueError('Endereço de email inválido')
+        raise TimeoutError("Não capturei a resposta de /api/email/generate dentro do timeout.")
 
-        local, domain = email_to_use.split('@', 1)
-        domain = domain.lower()
-
-        if domain != 'gmail.com':
-            raise ValueError('Somente domínios gmail.com são suportados')
-
-        tag = ''.join(random.choices(string.ascii_lowercase + string.digits, k=tamanho_tag))
-        return f"{local}+{tag}@{domain}"
-
-    def decodificar_subject(self, subject):
-        """
-        Decodifica um header de assunto potencialmente quebrado em múltiplas partes codificadas.
-        """
-        decoded_fragments = decode_header(subject)
-        parts = []
-
-        for fragment, encoding in decoded_fragments:
-            if isinstance(fragment, bytes):
-                if encoding:
-                    parts.append(fragment.decode(encoding, errors='replace'))
-                else:
-                    parts.append(fragment.decode(errors='replace'))
-            else:
-                parts.append(fragment)
-
-        return ''.join(parts)
-
-    def wait_for_new_message(
+    # -------- ouvir inbox até achar a verificação --------
+    def wait_verification_message(
         self,
-        sender_filter,
-        subject_prefix="",
-        check_interval=10,
-        on_match='delete'        # 'delete' | 'read' | 'none'
+        sender_contains: str,
+        subject_prefix: str,
+        timeout: float = 120.0,
     ):
         """
-        Espera por novas mensagens não lidas de um remetente específico.
-        Filtra pelo assunto começando com subject_prefix (se fornecido).
-        Ao encontrar, executa a ação (apagar, marcar como lida ou nada) e retorna
-        SEMPRE um dicionário com subject, from, date e body.
-        - on_match: 'delete' move p/ lixeira e expunge o original; 'read' marca como lida; 'none' não altera flags.
+        Ouve /api/email/inbox até o 'emails' vir com conteúdo e
+        encontrar a mensagem cujo remetente contém `sender_contains`
+        e o assunto começa com `subject_prefix`.
+        Retorna um dict simples com os campos mais úteis.
         """
-        import re
+        import time
+        deadline = time.time() + (timeout if timeout else 10**9)
 
-        while True:
-            self.mail.select("INBOX")
-            search_criteria = f'(UNSEEN FROM "{sender_filter}")'
-            result, data = self.mail.search(None, search_criteria)
-            if result != 'OK':
-                time.sleep(check_interval)
-                continue
+        # inicie a escuta antes (boas práticas do DrissionPage)
+        self.tab.listen.start('/api/email/inbox')
 
-            email_ids = data[0].split()
-            if email_ids:
-                # do mais recente para o mais antigo
-                for eid in reversed(email_ids):
-                    result, msg_data = self.mail.fetch(eid, "(RFC822)")
-                    if result != 'OK' or not msg_data or not msg_data[0]:
+        try:
+            while time.time() < deadline:
+                remaining = max(0.5, deadline - time.time())
+                # steps(): itera “em tempo real”; timeout interrompe o iterador
+                for packet in self.tab.listen.steps(timeout=remaining):
+                    # podem vir pacotes não-JSON; ignore com segurança
+                    try:
+                        data = _to_json(packet.response.body)
+                    except Exception:
                         continue
 
-                    raw_email = msg_data[0][1]
-                    msg = email.message_from_bytes(raw_email)
+                    emails = data.get('emails')
+                    # polling costuma trazer [] ou {} – apenas continue
+                    if not emails:
+                        continue
 
-                    # Assunto decodificado
-                    subject = msg.get("Subject", "")
-                    subject_text = self.decodificar_subject(subject) if subject else ""
+                    # normaliza iteração (tanto dict quanto list)
+                    if isinstance(emails, dict):
+                        items = [(k, v) for k, v in emails.items()]
+                    else:  # assume lista de dicts
+                        items = [(str(e.get('id', '')), e) for e in emails if isinstance(e, dict)]
 
-                    if subject_text.startswith(subject_prefix or "") or subject_prefix == "":
-                        # Extrai corpo em texto simples (fallback HTML -> texto)
-                        body_text = ""
-                        if msg.is_multipart():
-                            # busca text/plain sem attachment
-                            for part in msg.walk():
-                                ctype = part.get_content_type()
-                                disp = (part.get("Content-Disposition") or "").lower()
-                                if ctype == "text/plain" and "attachment" not in disp:
-                                    payload = part.get_payload(decode=True) or b""
-                                    charset = part.get_content_charset() or "utf-8"
-                                    try:
-                                        body_text = payload.decode(charset, errors="replace")
-                                    except LookupError:
-                                        body_text = payload.decode(errors="replace")
-                                    break
-                            # fallback: tenta text/html
-                            if not body_text:
-                                for part in msg.walk():
-                                    if part.get_content_type() == "text/html":
-                                        payload = part.get_payload(decode=True) or b""
-                                        charset = part.get_content_charset() or "utf-8"
-                                        try:
-                                            html = payload.decode(charset, errors="replace")
-                                        except LookupError:
-                                            html = payload.decode(errors="replace")
-                                        # remove tags básicas
-                                        body_text = re.sub(r"<[^>]+>", " ", html)
-                                        break
-                        else:
-                            payload = msg.get_payload(decode=True) or b""
-                            charset = msg.get_content_charset() or "utf-8"
-                            try:
-                                body_text = payload.decode(errors="replace") if not charset else payload.decode(charset, errors="replace")
-                            except LookupError:
-                                body_text = payload.decode(errors="replace")
+                    for msg_id, msg in items:
+                        sender = (msg.get('sender') or msg.get('from') or '').lower()
+                        subject = msg.get('subject') or ''
+                        if sender_contains.lower() in sender and subject.startswith(subject_prefix):
+                            body = msg.get('body') or ''
+                            received_at = msg.get('received_at')
+                            return {
+                                'id': msg_id,
+                                'sender': msg.get('sender') or msg.get('from'),
+                                'subject': subject,
+                                'body': body,
+                                'received_at': received_at,
+                                'raw': msg,  # mantém bruto para quem precisar
+                            }
+                # se o iterador terminou por timeout mas ainda há tempo, loop continua
+        finally:
+            # pare a escuta ao sair (evita perder pacotes no meio)
+            self.tab.listen.stop()
 
-                        # Ação na mensagem encontrada
-                        try:
-                            if on_match == 'read':
-                                self.mail.store(eid, '+FLAGS', '\\Seen')
-                            elif on_match == 'delete':
-                                # Remove o original da INBOX
-                                self.mail.store(eid, '+FLAGS', '\\Deleted')
-                                self.mail.expunge()
-                        except Exception:
-                            pass
-
-                        return {
-                            "subject": subject_text,
-                            "from": msg.get("From"),
-                            "date": msg.get("Date"),
-                            "body": body_text
-                        }
-
-            time.sleep(check_interval)
+        raise TimeoutError('Não encontrei a mensagem de verificação dentro do timeout.')

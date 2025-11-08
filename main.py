@@ -90,9 +90,10 @@ def main():
     falhas = get_failed_results("output/resultados.csv")
     if falhas:
         logger.info(f"{len(falhas)} registros falharam e serão reprocessados.")
-        page = BrowserFactory.new_browser(cfg)
-        try_login(page, cfg["login_email"], cfg["login_senha"])
-        client = JusbrasilClient(page=page, cfg=cfg)
+        browser = BrowserFactory.new_browser(cfg)
+        page = browser.latest_tab
+        try_login(browser)
+        client = JusbrasilClient(browser=browser, cfg=cfg)
 
         for url, nome in falhas:
             logger.info(f"Reprocessando: {nome}")

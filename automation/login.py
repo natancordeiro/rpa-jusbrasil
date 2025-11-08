@@ -1,7 +1,6 @@
-from DrissionPage import ChromiumPage
-import time, os, random, string, re
+from DrissionPage import Chromium, ChromiumPage
+import time, random, string, re
 from utils.logger import logger
-from utils.config import load_config
 from utils.cf_bypass import CloudflareBypasser
 from utils.mail_client import MailClient
 
@@ -32,7 +31,10 @@ def _logado(page: ChromiumPage) -> bool:
     html = (page.html or "").lower()
     return ("sair" in html) or ("minha conta" in html) or ("perfil" in html)
 
-def try_login(page: ChromiumPage, email: str, senha: str) -> bool:
+def _pause(a=0.6, b=1.6):
+    time.sleep(random.uniform(a, b))
+
+def try_login(browser: Chromium) -> bool:
     """Agora realiza CADASTRO por e-mail (alias) em vez de login. Mantém assinatura e retorno booleano.
     Passos:
     - Acessa /login
@@ -44,50 +46,54 @@ def try_login(page: ChromiumPage, email: str, senha: str) -> bool:
     - Retorna True se sessão estiver ativa no final
     """
     # Se já estiver logado, não faz nada
-    if _logado(page):
+    login_tab = browser.latest_tab
+
+    if _logado(login_tab):
         return True
 
-    cfg = load_config("config.yaml")
-    mail_user = os.getenv('MAIL_USER_EMAIL') or cfg.get('mail_user_email', '')
-    mail_pass = os.getenv('MAIL_APP_PASSWORD') or cfg.get('mail_app_password', '')
-    imap_server = os.getenv('MAIL_IMAP_SERVER') or cfg.get('imap_server', 'imap.gmail.com')
-    if not mail_user or not mail_pass:
-        logger.error('[login] Configure MAIL_USER_EMAIL e MAIL_APP_PASSWORD (ou mail_user_email/mail_app_password em config.yaml).')
-        return False
-
     # 1) Abre página de login/cadastro
-    page.get(LOGIN_URL)
-    page.wait.doc_loaded()
+    login_tab.get(LOGIN_URL)
+    login_tab.wait.doc_loaded()
 
     # 2) Gera alias e envia no input
-    client = MailClient(user_email=mail_user, app_password=mail_pass, imap_server=imap_server)
-    client.connect()
-    alias = client.gerar_alias_gmail()
+    mails = MailClient(browser)
+    email_gerado = mails.wait_email_generated(timeout=30)
+    browser._mail_client = email_gerado
 
-    e_email = page.ele('css=input[type="email"], input[name*="email" i], input#email', timeout=8)
+    _pause()
+    browser.activate_tab(login_tab)
+    e_email = login_tab.ele('css=input[type="email"], input[name*="email" i], input#email', timeout=8)
     if not e_email:
         logger.error('[login] Campo de e-mail não encontrado.')
         return False
-    e_email.clear(); e_email.input(alias)
+    _pause()
+    e_email.clear()
+    _pause(5.6, 8.6)
+    e_email.input(email_gerado)
+    _pause(3.6, 6.6)
 
-    btn_continuar = page.ele('xpath://button[.//text()[contains(., "Continuar") or contains(., "Login") or contains(., "Entrar")]] | //input[@type="submit"]', timeout=5)
+    btn_continuar = login_tab.ele('xpath://button[.//text()[contains(., "Continuar") or contains(., "Login") or contains(., "Entrar")]] | //input[@type="submit"]', timeout=5)
     if btn_continuar:
         btn_continuar.click()
-    page.wait.doc_loaded()
+        login_tab.wait(5)
+    login_tab.wait.doc_loaded()
+    _pause()
 
     # Aguarda a URL de confirmação enviada (método oficial)
     try:
-        page.wait.url_change('cadastro/confirmacao-por-email-enviada', timeout=30)
+        login_tab.wait.url_change('cadastro/confirmacao-por-email-enviada', timeout=30)
     except Exception:
         time.sleep(2)
 
     # 3) Aguarda e-mail de confirmação e obtém link
-    msg = client.wait_for_new_message(
-        'concluir-cadastro@jusbrasil.com.br',
-        subject_prefix='',
-        check_interval=3,
-        on_match='delete'
+    browser.activate_tab(mails.tab)
+    msg = mails.wait_verification_message(
+        sender_contains='concluir-cadastro@jusbrasil.com.br',
+        subject_prefix='Confirme seu endereço',
+        timeout=240
     )
+    browser.activate_tab(login_tab)
+    browser._close_tab(mails.tab)
     if not msg or not msg.get('body'):
         logger.error('[login] E-mail de confirmação não recebido.')
         return False
@@ -98,25 +104,26 @@ def try_login(page: ChromiumPage, email: str, senha: str) -> bool:
         logger.error('[login] Link de confirmação não encontrado no e-mail.')
         return False
     confirm_url = m.group(0)
-    page.get(confirm_url)
+    _pause(5.6, 8.6)
+    login_tab.get(confirm_url)
 
     # 4) Aguardar e tentar bypass Cloudflare se aparecer "Just a moment..."
     time.sleep(1.0)
     try:
-        title = (page.title or '').lower()
+        title = (login_tab.title or '').lower()
     except Exception:
         title = ''
     if 'moment' in title:
-        CloudflareBypasser(page, max_retries=3).bypass()
+        CloudflareBypasser(login_tab, max_retries=3).bypass()
 
     # 5) Aguarda até chegar em /cadastro/email (boa prática)
     try:
-        page.wait.url_change('/cadastro/email', timeout=30)
+        login_tab.wait.url_change('/cadastro/email', timeout=30)
     except Exception:
         pass
 
     # 6) Checa status 4xx do request de confirmação
-    formulario = page.ele('text:Complete seus dados', timeout=30)
+    formulario = login_tab.ele('text:Complete seus dados', timeout=30)
     if not formulario:
         logger.error('[login] Formulário de criação de conta nao encontrado.')
         return False
@@ -125,21 +132,30 @@ def try_login(page: ChromiumPage, email: str, senha: str) -> bool:
     nome = gerar_nome_brasileiro()
     senha_final = gerar_senha(10)
 
-    e_nome = page.ele('#FormFieldset-name', timeout=10)
+    e_nome = login_tab.ele('#FormFieldset-name', timeout=10)
     if not e_nome:
         logger.error('[login] Campo nome não encontrado.')
         return False
-    e_nome.clear(); e_nome.input(nome)
+    _pause()
+    e_nome.clear() 
+    _pause()
+    e_nome.input(nome)
+    _pause(2.6, 5.6)
 
-    e_senha = page.ele('#FormFieldset-password', timeout=10)
+    e_senha = login_tab.ele('#FormFieldset-password', timeout=10)
     if not e_senha:
         logger.error('[login] Campo senha não encontrado.')
         return False
-    e_senha.clear(); e_senha.input(senha_final)
+    _pause()
+    e_senha.clear()
+    _pause()
+    e_senha.input(senha_final)
+    _pause(2.6, 5.6)
 
-    e_ocup = page.ele('#FormFieldset-mainOccupation', timeout=10)
+    e_ocup = login_tab.ele('#FormFieldset-mainOccupation', timeout=10)
     if e_ocup and getattr(e_ocup, 'select', None):
         try:
+            _pause()
             options = e_ocup.select.options
             total = len(options) if options else 0
             if total > 1:
@@ -150,13 +166,14 @@ def try_login(page: ChromiumPage, email: str, senha: str) -> bool:
         except Exception:
             pass
 
-    btn_submit = page.ele('css=button[data-testid="submit-button"], button.SubmitButton[type="submit"], button[type="submit"]', timeout=8)
+    _pause()
+    btn_submit = login_tab.ele('css=button[data-testid="submit-button"], button.SubmitButton[type="submit"], button[type="submit"]', timeout=8)
     if btn_submit:
         btn_submit.click()
         try:
-            page.wait.url_change('acompanhamentos/processos', timeout=30)
+            login_tab.wait.url_change('acompanhamentos/processos', timeout=30)
         except Exception:
             time.sleep(5)
 
     # 8) Verifica sessão ativa
-    return _logado(page)
+    return _logado(login_tab)

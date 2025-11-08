@@ -23,7 +23,8 @@ class BrowserFactory:
                 co.add_extension(p)
 
         browser = Chromium(addr_or_opts=co)
-        return browser.latest_tab
+        browser._mail_client = None
+        return browser
 
     @staticmethod
     def recreate(prev_page: ChromiumPage, cfg: dict) -> ChromiumPage:

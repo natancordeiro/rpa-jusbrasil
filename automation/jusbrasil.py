@@ -3,7 +3,7 @@ import time, os
 from dataclasses import dataclass
 from bs4 import BeautifulSoup
 
-from DrissionPage import ChromiumPage
+from DrissionPage import Chromium
 from utils.logger import logger
 from utils.cf_bypass import CloudflareBypasser
 from automation.login import try_login
@@ -20,9 +20,10 @@ class SubmitResult:
 
 
 class JusbrasilClient:
-    def __init__(self, page: ChromiumPage, cfg: dict):
+    def __init__(self, browser: Chromium, cfg: dict):
         self.cfg = cfg
-        self.page = page
+        self.browser = browser
+        self.page = self.browser.latest_tab
         self.salvar_capturas = self.cfg.get('salvar_capturas', False)
         self.evid_dir = self.cfg.get('evid_dir', 'output/screenshots')
 
@@ -68,7 +69,7 @@ class JusbrasilClient:
                 )
                 if not logado:
                     logger.warning("Sessão desconectada. Reautenticando via try_login()...")
-                    ok = try_login(self.page, self.cfg.get("login_email", ""), self.cfg.get("login_senha", ""))
+                    ok = try_login(self.browser)
                     if not ok:
                         logger.error("Falha ao relogar na conta.")
                     else:
@@ -188,7 +189,7 @@ class JusbrasilClient:
             # 1.5) Verifica se está logado, e refaz o login
             logado = self.page.ele('css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]', timeout=15)
             if not logado:
-                ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
+                ok = try_login(self.browser)
 
             # 2) Vá para o formulário
             self._go_report_via_form_submit()
@@ -208,6 +209,8 @@ class JusbrasilClient:
                 "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Connection": "keep-alive",
             }
+            
+            email_envio = self.browser._mail_client
 
             confirm_url = f"{BASE_URL}/contato/remocao/confirmacao"
             data_confirm = {
@@ -216,7 +219,7 @@ class JusbrasilClient:
                 "name_remove": nome,
                 "full_name": full_name,
                 "telephone": telefone,
-                "email": self.cfg["login_email"],
+                "email": email_envio,
                 "submit-contact": ""
             }
 

@@ -18,20 +18,23 @@ class Worker(threading.Thread):
         self.jobs = jobs
         self.cfg = config
         self.page = None
+        self.browser = None
 
     def _start_browser(self):
-        self.page = BrowserFactory.new_browser(self.cfg)
+        self.browser = BrowserFactory.new_browser(self.cfg)
+        self.page = self.browser.latest_tab
         logger.info(f"[{self.name}] Chromium iniciado.")
 
     def _restart_browser(self):
         logger.warning(f"[{self.name}] Reiniciando navegador para trocar IP/porta…")
-        self.page = BrowserFactory.recreate(prev_page=self.page,cfg=self.cfg)
+        self.browser = BrowserFactory.recreate(prev_page=self.page,cfg=self.cfg)
+        self.page = self.browser.latest_tab
         logger.info(f"[{self.name}] Chromium recriado.")
 
     def run(self):
         self._start_browser()
         try:
-            ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
+            ok = try_login(self.browser)
             logger.info(f"Login: {'OK' if ok else 'não efetuado'}")
         except Exception as e:
             logger.warning(f"Falha ao tentar login: {e}")
@@ -64,7 +67,7 @@ class Worker(threading.Thread):
 
                 try:
                     client = JusbrasilClient(
-                        page=self.page,
+                        browser=self.browser,
                         cfg=self.cfg
                     )
                     res = client.submit_removal_form(url, nome)
