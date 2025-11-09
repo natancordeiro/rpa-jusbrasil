@@ -153,19 +153,8 @@ def try_login(browser: Chromium) -> bool:
     _pause(2.6, 5.6)
 
     e_ocup = login_tab.ele('#FormFieldset-mainOccupation', timeout=10)
-    if e_ocup and getattr(e_ocup, 'select', None):
-        try:
-            _pause()
-            options = e_ocup.select.options
-            total = len(options) if options else 0
-            if total > 1:
-                idx = random.randint(1, total - 1)
-                e_ocup.select(idx)
-            else:
-                e_ocup.select('Outra profissão')
-        except Exception:
-            pass
-
+    e_ocup.select('Outra profissão')
+    
     _pause()
     btn_submit = login_tab.ele('css=button[data-testid="submit-button"], button.SubmitButton[type="submit"], button[type="submit"]', timeout=8)
     if btn_submit:
