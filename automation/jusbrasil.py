@@ -212,18 +212,16 @@ class JusbrasilClient:
           - tenta contornar 'Just a moment...' (Cloudflare)
           - seleciona motivo 'NOME_VITIMA', preenche nome, telefone, anexa PDF, marca checkbox e envia
         """
-        BASE_URL = "https://www.jusbrasil.com.br"
-
         try:
             # 1) Abre a página original (onde aparece o nome)
             self.page.get(diario_url)
             time.sleep(1.5)
-            self._check_blockers_and_recover(diario_url)
+            self._check_blockers_and_recover()
 
             # 1.5) Verifica se está logado, e refaz o login
             logado = self.page.ele('css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]', timeout=15)
             if not logado:
-                ok = try_login(self.browser, rotate=True, cfg=self.cfg)
+                ok = try_login(self.page, self.cfg["login_email"], self.cfg["login_senha"])
 
             # 2) Vá para o formulário
             self._go_report_via_form_submit()
@@ -231,114 +229,148 @@ class JusbrasilClient:
             time.sleep(1)
 
             # 3) Checagens de bloqueio/página indisponível e Cloudflare novamente
-            self.page.wait(5)
-            self._check_blockers_and_recover(diario_url)
+            self._check_blockers_and_recover()
             self._wait_cloudflare_and_bypass()
 
-            telefone = self._random_phone()
-            full_name = self.page.ele('#full_name', timeout=20).attrs['value']
-            pdf_file = (os.path.join(os.getcwd(), 'utilitarios', 'arquivo.pdf'), b"%PDF-1.4\n%EOF", "application/pdf")
+            # 4) Preenche os campos do formulário (mapeados como no projeto antigo)
+            try:
+                close_popup = self.page.ele('css=i.icon-remove', timeout=30)
+                if close_popup:
+                    close_popup.wait.clickable(timeout=15)
+                    if close_popup.states.has_rect:
+                        close_popup.click()
+                        self.page.wait(0.5)
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao fechar popup: {type(e).__name__}: {e}")
 
-            default_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-                "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Connection": "keep-alive",
-            }
-            
-            email_envio = self.browser._mail_client
-            logger.info(f"Dados de entrada: URL: {diario_url}, Nome remoção: {nome}, Nome conta: {full_name}, telefone: {telefone}, email conta: {email_envio}")
+            try:
+                select_motivo = self.page.ele('css=#removal_reason', timeout=15)
+                if select_motivo:
+                    opt_vitima = self.page.ele('css=option[value="NOME_VITIMA"]', timeout=3)
+                    if opt_vitima:
+                        select_motivo.select(opt_vitima.text)
+                        self.page.wait(0.5)
+                    else:
+                        # fallback: escolhe o 2º item
+                        try:
+                            if hasattr(select_motivo, 'select'):
+                                select_motivo.select(1)
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao selecionar motivo: {type(e).__name__}: {e}")
 
-            confirm_url = f"{BASE_URL}/contato/remocao/confirmacao"
-            data_confirm = {
-                "referrer": diario_url,
-                "removal_reason": "NOME_VITIMA",
-                "name_remove": nome,
-                "full_name": full_name,
-                "telephone": telefone,
-                "email": email_envio,
-                "submit-contact": ""
-            }
+            #    Nome
+            try:
+                nome_input = self.page.ele('css=#name_remove', timeout=6)
+                if nome_input:
+                    try:
+                        nome_input.input(nome, clear=True)
+                        self.page.wait(1)
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao preencher nome: {type(e).__name__}: {e}")
 
-            files = {
-                "documentation": pdf_file
-            }
+            #    Telefone
+            try:
+                tel_input = self.page.ele('css=#telephone', timeout=4)
+                if tel_input:
+                    try:
+                        tel_input.input(self._random_phone(), clear=True)
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao preencher telefone: {type(e).__name__}: {e}")
 
-            # Primeira requisição: confirmação
-            # self.page.reconnect(10)
-            self.page.wait(2)
-            resp = self.page.post(confirm_url, headers=default_headers, data=data_confirm, files=files, retry=3)
+            #    Anexo (PDF)
+            try:
+                doc_input = self.page.ele('css=#documentation', timeout=3)
+                if doc_input:
+                    # usa o mesmo arquivo do projeto novo
+                    pdf_file = os.path.join(os.getcwd(), 'utilitarios', 'arquivo.pdf')
+                    doc_input.input(pdf_file)
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao preencher anexo: {type(e).__name__}: {e}")
 
-            if resp.status_code == 403:
-                # 1) Tenta extrair a URL de desafio no HTML
-                host = urlparse(confirm_url).netloc or "www.jusbrasil.com.br"
-                cf_url = _extract_cf_challenge_url(resp.content, base_url=host)
-                if cf_url:
-                    logger.warning(f"[403] Cloudflare detectado. Acessando desafio: {cf_url}")
+            #    Enviar solicitação
+            try:
+                submit_btn = self.page.ele('css=button[type="submit"]', timeout=3)
+                if submit_btn:
+                    submit_btn.click()
+                    self.page.wait(5)
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao enviar solicitação: {type(e).__name__}: {e}")
 
-                    # 2) Dispara um GET na URL do desafio usando a mesma sessão
-                    self.page.get(cf_url)
+            # 4.1) Checagens de bloqueio/página indisponível e Cloudflare novamente
+            self._check_blockers_and_recover()
+            self._wait_cloudflare_and_bypass()
 
-                    # 3) Executa os tratamentos padrão de bloqueio e bypass
-                    self._check_blockers_and_recover(diario_url)
-                    self._wait_cloudflare_and_bypass()
+            try:
+                close_popup = self.page.ele('css=i.icon-remove', timeout=30)
+                if close_popup:
+                    close_popup.wait.clickable(timeout=15)
+                    if close_popup.states.has_rect:
+                        close_popup.click()
+                        self.page.wait(0.5)
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao fechar popup: {type(e).__name__}: {e}")
 
-                    # 4) Tenta novamente o POST original, agora com o cookie do desafio resolvido
-                    resp = self.page.post(
-                        confirm_url,
-                        headers=default_headers,
-                        data=data_confirm,
-                        files=files,
-                        retry=3
-                    )
+            #    Checkbox de confirmação
+            try:
+                cb = self.page.ele('css=#check_confirm', timeout=5)
+                if cb:
+                    try:
+                        # DrissionPage: states.is_checked + .check()
+                        while not self.page.ele('css=#check_confirm', timeout=5).states.is_checked:
+                            self.page.ele('css=#check_confirm', timeout=5).check()
+                            self.page.wait(1)
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.error(f"[submit_removal_form] Erro ao preencher checkbox: {type(e).__name__}: {e}")
+            time.sleep(2)
 
-            if resp.status_code != 200 and resp.status_code != 403:
-                logger.error(f"Falha na etapa de confirmação: status {resp.status_code}")
-                return SubmitResult(ok=False, status=str(resp.status_code), msg="Falha na confirmação")
-
-            # Extrai file_path da resposta
-            soup = BeautifulSoup(resp.text, "html.parser")
-            file_path_input = soup.find("input", {"id": "file_path"})
-            if not file_path_input:
-                logger.error("Campo file_path não encontrado na resposta de confirmação")
-                return SubmitResult(ok=False, status="error", msg="file_path não encontrado")
-
-            file_path = file_path_input.attrs.get("value", "")
-
-            # Segunda requisição: envio final
-            remocao_url = f"{BASE_URL}/contato/remocao/enviar"
-            data_envio = {
-                "csrf_token": "None",
-                "referrer": diario_url,
-                "removal_reason": "NOME_VITIMA",
-                "full_name": full_name,
-                "name_remove": nome,
-                "telephone": telefone,
-                "email": email_envio,
-                "file_path": file_path,
-                "file_name": "arquivo.pdf",
-                "check_confirm": "y",
-                "g-recaptcha-response": ""
-            }
-
-            resp_envio = self.page.post(remocao_url, headers=default_headers, data=data_envio, retry=3)
-
-            if resp_envio.status_code == 200:
-                logger.info("Remoção bem-sucedida.")
-                return SubmitResult(ok=True, status="SUCESSO", msg="Remoção concluída com sucesso")
-            
-            elif resp_envio.status_code == 409:
-                soup = BeautifulSoup(resp_envio.text, "html.parser")
-                msg_erro = soup.find("div", {"class": "message-error"})
-                erro_texto = msg_erro.text.strip() if msg_erro else "Erro desconhecido"
-                logger.warning(f"Remoção não concluída (já solicitada?): {erro_texto}")
-                return SubmitResult(ok=False, status="ERRO_VALIDACAO", msg=erro_texto)
-            
+            # 5) Enviar
+            submit_btn = self.page.ele('css=button[type="submit"]', timeout=3)
+            if submit_btn:
+                submit_btn.click()
             else:
-                logger.error(f"Erro inesperado na remoção. Status {resp_envio.status_code}")
-                return SubmitResult(ok=False, status=str(resp_envio.status_code), msg="Erro inesperado")
+                logger.error(f"[submit_removal_form] Não localizei botão de envio no formulário: {type(e).__name__}: {e}")
+                self._screenshot("sem_submit")
+                return SubmitResult(False, "FORM_SEM_SUBMIT", "Não localizei botão de envio no formulário.")
+
+            # 6) Pós-envio: checagens e detecção de sucesso
+            time.sleep(2)
+            self._check_blockers_and_recover()
+            self._wait_cloudflare_and_bypass()
+            seletores = ['css=i.icon-remove', 
+                         'text:Apenas remover', 
+                         'text:solicitada com sucesso', 
+                         'css=div.message-error'
+                        ]
+            self.page.wait.eles_loaded(seletores, timeout=25, any_one=True)
+            seletor, elemento = self.page.find(seletores[1:], timeout=25, any_one=True)
+
+            # Página de sucesso
+            if seletor == 'text:solicitada com sucesso':
+                logger.info("[submit_removal_form] Remoção solicitada com sucesso.")
+                return SubmitResult(True, "SUCESSO", "Remoção solicitada com sucesso.")
+
+            # Página de erro
+            if seletor == 'css=div.message-error':
+                logger.error(f"[submit_removal_form] Erro de validação no formulário: {elemento.text}")
+                return SubmitResult(False, "ERRO_VALIDACAO", f"Erro de validação no formulário: {elemento.text}")
+            
+            # Página sem confirmação
+            if seletor == 'text:Apenas remover':
+                logger.error("[submit_removal_form] Botão 'apenas remover' apareceu no resultado final.")
+                return SubmitResult(False, "ERRO_VALIDACAO", f"Botão 'apenas remover' apareceu no resultado final.")
 
         except BlockedError as be:
             return SubmitResult(False, "BLOQUEADO", str(be))
         except Exception as e:
+            self._screenshot("erro_form")
             logger.error(f"[submit_removal_form] Erro inesperado: {e}")
             return SubmitResult(False, "ERRO_FORM", f"Falha preenchendo/enviando formulário: {e}")
+
