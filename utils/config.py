@@ -16,4 +16,11 @@ def load_config(path: str = "config.yaml") -> dict:
     cfg.setdefault("mail_user_email", "")
     cfg.setdefault("mail_app_password", "")
     cfg.setdefault("imap_server", "imap.gmail.com")
+    auth = cfg.get("auth", {}) if isinstance(cfg.get("auth", {}), dict) else {}
+    auth.setdefault("mode", "cadastro")  # valores: 'cadastro' | 'login'
+    auth.setdefault("accounts_csv", "")  # caminho do CSV com colunas email,senha
+    auth.setdefault("accounts_csv_delimiter", "")  # se vazio, detecta automaticamente
+    auth.setdefault("persist_rotation_state", True)  # manter estado entre execuções
+    auth.setdefault("rotation_state_path", "output/accounts_state.json")  # onde salvar estado
+    cfg["auth"] = auth
     return cfg
