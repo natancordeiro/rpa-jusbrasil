@@ -2,11 +2,45 @@
 import time, os
 from dataclasses import dataclass
 from bs4 import BeautifulSoup
+import re
+from urllib.parse import urljoin, urlparse
 
 from DrissionPage import Chromium
 from utils.logger import logger
 from utils.cf_bypass import CloudflareBypasser
 from automation.login import try_login
+
+def _extract_cf_challenge_url(body: bytes | str, base_url: str) -> str | None:
+    """Extrai a URL do desafio Cloudflare do HTML de erro 403.
+    Retorna uma URL absoluta (https://host/...); se não encontrar, retorna None.
+    """
+    if isinstance(body, bytes):
+        text = body.decode('utf-8', 'ignore')
+    else:
+        text = body or ''
+
+    # normaliza \/ -> / para facilitar os regex
+    norm = text.replace('\\/', '/')
+
+    # Padrões, em ordem de preferência
+    patterns = [
+        r'["\'](/contato/remocao/confirmacao\?__cf_chl_tk=[^"\'>\s]+)["\']',      # principal
+        r'["\'](/contato/remocao/confirmacao\?__cf_chl_f_tk=[^"\'>\s]+)["\']',    # fallback
+        r'["\'](/contato/remocao/confirmacao\?__cf_chl_rt_tk=[^"\'>\s]+)["\']',   # fallback
+        r'(?:fa|cUPMDTk)\s*:\s*["\'](/contato/remocao/confirmacao\?[^"\']+)["\']' # propriedades do objeto JS
+    ]
+
+    for pat in patterns:
+        m = re.search(pat, norm, flags=re.I | re.S)
+        if m:
+            path = m.group(1)
+            # Garante domínio do confirm_url original
+            base = base_url
+            if not (base.startswith('http://') or base.startswith('https://')):
+                base = 'https://' + base
+            return urljoin(base, path)
+
+    return None
 
 class BlockedError(Exception):
     """Levanta quando o site bloqueia o IP (precisa reiniciar o navegador)."""
@@ -69,7 +103,7 @@ class JusbrasilClient:
                 )
                 if not logado:
                     logger.warning("Sessão desconectada. Reautenticando via try_login()...")
-                    ok = try_login(self.browser)
+                    ok = try_login(self.browser, rotate=True, cfg=self.cfg)
                     if not ok:
                         logger.error("Falha ao relogar na conta.")
                     else:
@@ -189,7 +223,7 @@ class JusbrasilClient:
             # 1.5) Verifica se está logado, e refaz o login
             logado = self.page.ele('css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]', timeout=15)
             if not logado:
-                ok = try_login(self.browser)
+                ok = try_login(self.browser, rotate=True, cfg=self.cfg)
 
             # 2) Vá para o formulário
             self._go_report_via_form_submit()
@@ -197,6 +231,7 @@ class JusbrasilClient:
             time.sleep(1)
 
             # 3) Checagens de bloqueio/página indisponível e Cloudflare novamente
+            self.page.wait(5)
             self._check_blockers_and_recover(diario_url)
             self._wait_cloudflare_and_bypass()
 
@@ -205,12 +240,13 @@ class JusbrasilClient:
             pdf_file = (os.path.join(os.getcwd(), 'utilitarios', 'arquivo.pdf'), b"%PDF-1.4\n%EOF", "application/pdf")
 
             default_headers = {
-                "User-Agent": self.page.user_agent,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
                 "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Connection": "keep-alive",
             }
             
             email_envio = self.browser._mail_client
+            logger.info(f"Dados de entrada: URL: {diario_url}, Nome remoção: {nome}, Nome conta: {full_name}, telefone: {telefone}, email conta: {email_envio}")
 
             confirm_url = f"{BASE_URL}/contato/remocao/confirmacao"
             data_confirm = {
@@ -228,11 +264,34 @@ class JusbrasilClient:
             }
 
             # Primeira requisição: confirmação
-            self.page.reconnect(10)
+            # self.page.reconnect(10)
             self.page.wait(2)
             resp = self.page.post(confirm_url, headers=default_headers, data=data_confirm, files=files, retry=3)
 
-            if resp.status_code != 200:
+            if resp.status_code == 403:
+                # 1) Tenta extrair a URL de desafio no HTML
+                host = urlparse(confirm_url).netloc or "www.jusbrasil.com.br"
+                cf_url = _extract_cf_challenge_url(resp.content, base_url=host)
+                if cf_url:
+                    logger.warning(f"[403] Cloudflare detectado. Acessando desafio: {cf_url}")
+
+                    # 2) Dispara um GET na URL do desafio usando a mesma sessão
+                    self.page.get(cf_url)
+
+                    # 3) Executa os tratamentos padrão de bloqueio e bypass
+                    self._check_blockers_and_recover(diario_url)
+                    self._wait_cloudflare_and_bypass()
+
+                    # 4) Tenta novamente o POST original, agora com o cookie do desafio resolvido
+                    resp = self.page.post(
+                        confirm_url,
+                        headers=default_headers,
+                        data=data_confirm,
+                        files=files,
+                        retry=3
+                    )
+
+            if resp.status_code != 200 and resp.status_code != 403:
                 logger.error(f"Falha na etapa de confirmação: status {resp.status_code}")
                 return SubmitResult(ok=False, status=str(resp.status_code), msg="Falha na confirmação")
 
@@ -254,7 +313,7 @@ class JusbrasilClient:
                 "full_name": full_name,
                 "name_remove": nome,
                 "telephone": telefone,
-                "email": self.cfg["login_email"],
+                "email": email_envio,
                 "file_path": file_path,
                 "file_name": "arquivo.pdf",
                 "check_confirm": "y",

@@ -34,7 +34,7 @@ class Worker(threading.Thread):
     def run(self):
         self._start_browser()
         try:
-            ok = try_login(self.browser)
+            ok = try_login(self.browser, rotate=True, cfg=self.cfg)
             logger.info(f"Login: {'OK' if ok else 'não efetuado'}")
         except Exception as e:
             logger.warning(f"Falha ao tentar login: {e}")

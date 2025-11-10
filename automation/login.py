@@ -1,13 +1,19 @@
+from __future__ import annotations
 from DrissionPage import Chromium, ChromiumPage
-import time, random, string, re
+import time, random, string, re, csv, os, json, threading
+from pathlib import Path
+from typing import Optional
+
 from utils.logger import logger
 from utils.cf_bypass import CloudflareBypasser
 from utils.mail_client import MailClient
+from utils.config import load_config
 
 LOGIN_URL = "https://www.jusbrasil.com.br/login"
 
+# ------------------------ util geração de cadastro ------------------------
+
 def gerar_nome_brasileiro():
-    """Gera um nome completo com padrões simples do Brasil (nome + sobrenome)."""
     primeiro = random.choice([
         'Ana','Maria','João','Pedro','Lucas','Mateus','Juliana','Carla','Paulo','Rafael',
         'Bruna','Camila','Gabriel','Felipe','Rodrigo','Beatriz','Bianca','Carolina','Larissa','Mariana'
@@ -20,31 +26,167 @@ def gerar_nome_brasileiro():
 
 def gerar_senha(tamanho=8):
     if tamanho < 6:
-        tamanho = 6  # Garante mínimo
+        tamanho = 6
     caracteres = string.ascii_letters + string.digits + string.punctuation
     return ''.join(random.choices(caracteres, k=tamanho))
+
+def _pause(a=0.6, b=1.6):
+    time.sleep(random.uniform(a, b))
 
 def _logado(page: ChromiumPage) -> bool:
     el = page.ele('css=div.topbar-profile, img[class*="avatar_image"], span[class*="avatar_fallback"]', timeout=3)
     if el:
         return True
+    html = (page.html or '').lower()
+    return any(k in html for k in ('minha conta','perfil','sair'))
+
+# ------------------------ Gerenciador de contas CSV ------------------------
+
+class _AccountsPool:
+    def __init__(self, csv_path: str, delimiter: str = '', persist_state: bool = True, state_path: str = 'output/accounts_state.json'):
+        self.path = Path(csv_path)
+        self.delimiter = delimiter
+        self.persist = persist_state
+        self.state_path = Path(state_path)
+        self._rows: list[tuple[str,str]] = []
+        self._idx = 0
+        self._lock = threading.Lock()
+        self._load()
+        self._restore_state()
+
+    def _load(self):
+        if not self.path.exists():
+            raise FileNotFoundError(f"Arquivo CSV de contas não encontrado: {self.path}")
+        # detecta delimitador se necessário
+        delim = self.delimiter or None
+        with open(self.path, 'r', encoding='utf-8', newline='') as f:
+            sample = f.read(2048)
+            f.seek(0)
+            if not self.delimiter:
+                try:
+                    sniff = csv.Sniffer().sniff(sample, delimiters=',;|\t')
+                    delim = sniff.delimiter
+                except Exception:
+                    delim = ','
+            reader = csv.DictReader(f, delimiter=delim)
+            cols = [c.lower() for c in (reader.fieldnames or [])]
+            # mapeia nomes
+            def pick(*names):
+                for n in names:
+                    if n in cols:
+                        return n
+                return None
+            c_email = pick('email','login','usuario','user')
+            c_senha = pick('senha','password','pass')
+            if not c_email or not c_senha:
+                raise ValueError(f"CSV deve conter colunas 'email' e 'senha' (ou equivalentes). Cabeçalhos detectados: {cols}")
+            self._rows.clear()
+            for row in reader:
+                e = (row.get(c_email) or '').strip()
+                s = (row.get(c_senha) or '').strip()
+                if e and s:
+                    self._rows.append((e,s))
+        if not self._rows:
+            raise ValueError("Nenhuma conta válida encontrada no CSV.")
+
+    def _restore_state(self):
+        if not self.persist:
+            return
+        try:
+            if self.state_path.exists():
+                data = json.loads(self.state_path.read_text(encoding='utf-8') or '{}')
+                if str(self.path) == data.get('csv_path'):
+                    idx = int(data.get('next_index', 0))
+                    if 0 <= idx < len(self._rows):
+                        self._idx = idx
+        except Exception:
+            pass
+
+    def _save_state(self):
+        if not self.persist:
+            return
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            self.state_path.write_text(
+                json.dumps({'csv_path': str(self.path), 'next_index': self._idx}, ensure_ascii=False, indent=2),
+                encoding='utf-8'
+            )
+        except Exception:
+            pass
+
+    def current(self) -> tuple[int, tuple[str,str]]:
+        with self._lock:
+            return self._idx, self._rows[self._idx]
+
+    def next(self) -> tuple[int, tuple[str,str]]:
+        with self._lock:
+            self._idx = (self._idx + 1) % len(self._rows)
+            self._save_state()
+            return self._idx, self._rows[self._idx]
+
+# singleton simples em nível de módulo
+_ACCOUNTS: Optional[_AccountsPool] = None
+def _get_pool(cfg: dict) -> _AccountsPool:
+    global _ACCOUNTS
+    auth = cfg.get('auth', {}) or {}
+    csv_path = auth.get('accounts_csv') or ''
+    if not csv_path:
+        raise ValueError("Configuração 'auth.accounts_csv' não definida.")
+    if _ACCOUNTS is None or (Path(csv_path) != Path(_ACCOUNTS.path)):
+        _ACCOUNTS = _AccountsPool(
+            csv_path=csv_path,
+            delimiter=(auth.get('accounts_csv_delimiter') or ''),
+            persist_state=bool(auth.get('persist_rotation_state', True)),
+            state_path=auth.get('rotation_state_path', 'output/accounts_state.json')
+        )
+    return _ACCOUNTS
+
+# ------------------------ Fluxo: login com e-mail/senha ------------------------
+
+def _login_with_credentials(page: ChromiumPage, email: str, senha: str) -> bool:
+    if not email or not senha:
+        logger.error("[login] Email ou senha vazios.")
+        return False
+
+    # Se já está logado, sai
+    if _logado(page):
+        return True
+
+    page.get(LOGIN_URL)
+    page.wait.doc_loaded()
+    if _logado(page):
+        return True
+
+    # Preenche email
+    e_email = page.ele('xpath://input[@type="email" or @name="email" or contains(translate(@placeholder,"EMAIL","email"),"email") or contains(translate(@aria-label,"EMAIL","email"),"email")][1]', timeout=5)
+    if e_email:
+        e_email.clear()
+        e_email.input(email)
+        btn = page.ele('xpath://button[.//text()[contains(., "Entrar") or contains(., "Continuar") or contains(., "Login")]] | //input[@type="submit"]', timeout=3)
+        if btn: btn.click()
+        page.wait.doc_loaded()
+        time.sleep(1.2)
+
+    # Preenche senha
+    e_senha = page.ele('xpath://input[@type="password" or @name="password" or contains(translate(@placeholder,"SENHA","senha"),"senha")][1]', timeout=7)
+    if e_senha:
+        e_senha.clear()
+        e_senha.input(senha)
+        btn = page.ele('xpath://button[.//text()[contains(., "Entrar") or contains(., "Continuar") or contains(., "Login")]] | //input[@type="submit"]', timeout=5)
+        if btn: btn.click()
+        page.wait.doc_loaded()
+        time.sleep(3.0)
+
+    # Decide baseado no HTML
     html = (page.html or "").lower()
-    return ("sair" in html) or ("minha conta" in html) or ("perfil" in html)
+    ok = any(k in html for k in ("sair","minha conta","perfil"))
+    return ok
 
-def _pause(a=0.6, b=1.6):
-    time.sleep(random.uniform(a, b))
+# ------------------------ Fluxo: cadastro (já existente) ------------------------
 
-def try_login(browser: Chromium) -> bool:
-    """Agora realiza CADASTRO por e-mail (alias) em vez de login. Mantém assinatura e retorno booleano.
-    Passos:
-    - Acessa /login
-    - Preenche e envia o e-mail com um alias Gmail
-    - Aguarda /cadastro/confirmacao-por-email-enviada
-    - Lê e-mail de 'concluir-cadastro@jusbrasil.com.br', extrai link de confirmação e acessa
-    - Bypass Cloudflare se necessário e aguarda /cadastro/email
-    - Preenche nome, senha e ocupação; envia o formulário
-    - Retorna True se sessão estiver ativa no final
-    """
+def _register_new_account(browser: Chromium) -> bool:
+    """Fluxo atual de cadastro via email alias + confirmação por e-mail."""
+
     # Se já estiver logado, não faz nada
     login_tab = browser.latest_tab
 
@@ -166,3 +308,67 @@ def try_login(browser: Chromium) -> bool:
 
     # 8) Verifica sessão ativa
     return _logado(login_tab)
+
+# ------------------------ API pública ------------------------
+
+def try_login(browser: Chromium, rotate: bool = False, cfg: Optional[dict] = None) -> bool:
+    """
+    Modo configurável:
+    - auth.mode = 'cadastro' => executa o fluxo de criação de conta (com MailClient).
+    - auth.mode = 'login'    => lê o CSV e efetua login com e-mail/senha.
+    
+    Parâmetros:
+      browser: instância Chromium (DrissionPage).
+      rotate: quando True e em modo 'login', avança para a PRÓXIMA conta do CSV antes de tentar.
+      cfg: opcional; se None, carrega de config.yaml.
+    """
+    if cfg is None:
+        cfg = load_config("config.yaml")
+    auth = cfg.get('auth', {}) or {}
+    mode = str(auth.get('mode', 'cadastro')).strip().lower()
+
+    if mode in ('cadastro','register','signup'):
+        return _register_new_account(browser)
+
+    # ----- modo 'login' com CSV -----
+    page = browser.latest_tab
+    if _logado(page):
+        return True
+
+    pool = _get_pool(cfg)
+
+    # define qual conta usar
+    if rotate or not hasattr(browser, "_account_index"):
+        idx, (email, senha) = pool.next() if rotate else pool.current()
+        browser._account_index = idx
+    else:
+        idx = getattr(browser, "_account_index", None)
+        if idx is None:
+            idx, (email, senha) = pool.current()
+            browser._account_index = idx
+        else:
+            # alinhar pool ao índice atual, se necessário
+            _, (email, senha) = pool.current()
+            if idx != pool._idx:
+                with pool._lock:
+                    pool._idx = idx
+                    pool._save_state()
+                _, (email, senha) = pool.current()
+
+    logger.info(f"[login] Tentando login com conta #{browser._account_index + 1} do CSV.")
+    browser._mail_client = email
+    ok = _login_with_credentials(page, email, senha)
+    if ok:
+        browser._account_email = email
+        return True
+
+    # Tenta uma vez a próxima conta automaticamente
+    logger.warning("[login] Falhou. Tentando próxima conta do CSV...")
+    idx, (email, senha) = pool.next()
+    browser._account_index = idx
+    ok = _login_with_credentials(page, email, senha)
+    if ok:
+        browser._account_email = email
+        return True
+
+    return False

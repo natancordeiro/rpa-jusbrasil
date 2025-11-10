@@ -13,3 +13,10 @@ imap_server: imap.gmail.com
 # Proxy
 usar_proxy: true
 proxy_extension_path: "./utilitarios/proxy"
+
+auth:
+  mode: login                 # 'cadastro' ou 'login'
+  accounts_csv: "./contas.csv"   # caminho do CSV com as colunas - email,senha
+  accounts_csv_delimiter: ""     # vazio = detecta automático (, ; | \t)
+  persist_rotation_state: true   # lembra o “próximo” entre execuções
+  rotation_state_path: "output/accounts_state.json"
