@@ -75,6 +75,11 @@ class Worker(threading.Thread):
                     if res.status == "BLOQUEADO":
                         self._restart_browser()
                         time.sleep(2)
+                        try:
+                            ok = try_login(self.browser, cfg=self.cfg) or try_login(self.browser, rotate=True, cfg=self.cfg)
+                            logger.info(f"[{self.name}] Reautenticação pós-bloqueio: {'OK' if ok else 'falhou'}")
+                        except Exception as e:
+                            logger.warning(f"[{self.name}] Erro ao reautenticar pós-bloqueio: {e}")
                         continue
 
                     append_result(url, nome, res.status, res.msg, idx=idx)
@@ -83,6 +88,11 @@ class Worker(threading.Thread):
                 except BlockedError:
                     self._restart_browser()
                     time.sleep(2)
+                    try:
+                        ok = try_login(self.browser, cfg=self.cfg) or try_login(self.browser, rotate=True, cfg=self.cfg)
+                        logger.info(f"[{self.name}] Reautenticação pós-bloqueio: {'OK' if ok else 'falhou'}")
+                    except Exception as e:
+                        logger.warning(f"[{self.name}] Erro ao reautenticar pós-bloqueio: {e}")
                     continue
 
                 except Exception as e:
